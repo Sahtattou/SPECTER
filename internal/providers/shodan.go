@@ -46,3 +46,7 @@ func (s *ShodanProvider) Fetch(ip string) (*models.ThreatRecord, error) {
 			"LastUpdate":      host.LastUpdate,
 		}}, nil
 }
+
+func (p *ShodanProvider) Supports(targetType string) bool {
+	return targetType == "ip"
+}

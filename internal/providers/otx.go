@@ -9,7 +9,6 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-// We only need the PulseInfo to know if it's considered malicious
 type OTXResponse struct {
 	PulseInfo struct {
 		Count  int `json:"count"`
@@ -92,4 +91,8 @@ func (p *OTXProvider) Fetch(target string) (*models.ThreatRecord, error) {
 			"tags":        allTags,
 		},
 	}, nil
+}
+
+func (p *OTXProvider) Supports(targetType string) bool {
+	return targetType == "ip" || targetType == "domain"
 }

@@ -21,7 +21,7 @@ type CrtShProvider struct {
 
 func InitCrtShProvider() *CrtShProvider {
 	return &CrtShProvider{
-		Client: resty.New().SetTimeout(45 * time.Second),
+		Client: resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
 	}
 }
 
@@ -76,4 +76,8 @@ func (p *CrtShProvider) Fetch(target string) (*models.ThreatRecord, error) {
 			"subdomain_count":    len(uniqueSubdomains),
 		},
 	}, nil
+}
+
+func (p *CrtShProvider) Supports(targetType string) bool {
+	return targetType == "domain"
 }

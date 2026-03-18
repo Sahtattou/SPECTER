@@ -26,8 +26,7 @@ type URLhausProvider struct {
 
 func InitURLhausProvider(apiKey string) *URLhausProvider {
 	return &URLhausProvider{
-		Client: resty.New().SetTimeout(15*time.Second).
-			SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+		Client: resty.New().SetTimeout(15*time.Second).SetRetryCount(2).SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
 		APIKey: apiKey,
 	}
 }
@@ -93,4 +92,8 @@ func (p *URLhausProvider) Fetch(target string) (*models.ThreatRecord, error) {
 			"tags":                uniqueTags,
 		},
 	}, nil
+}
+
+func (p *URLhausProvider) Supports(targetType string) bool {
+	return targetType == "ip" || targetType == "domain"
 }
