@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Protocol
 
-from app.clients.go_api_client import GoAPIClient
 from app.schemas import BlueAnalysisResponse
-from app.tools.event_tools import get_recent_events
+
+
+class EventsClient(Protocol):
+    def get_recent_events(
+        self, limit: int = 100, stage: str | None = None
+    ) -> List[Dict[str, Any]]: ...
 
 
 def _to_float(value: Any) -> float:
@@ -15,8 +19,10 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
-def run_blue_analyst_chain(client: GoAPIClient, limit: int = 100) -> BlueAnalysisResponse:
-    events = get_recent_events(client, limit=limit)
+def run_blue_analyst_chain(
+    client: EventsClient, limit: int = 100
+) -> BlueAnalysisResponse:
+    events = client.get_recent_events(limit=limit)
     if not events:
         return BlueAnalysisResponse(
             summary="No events available from the Go API for analysis.",
@@ -26,7 +32,9 @@ def run_blue_analyst_chain(client: GoAPIClient, limit: int = 100) -> BlueAnalysi
             recommended_actions=["Confirm collector and worker services are running."],
         )
 
-    threat_counts = Counter((event.get("threat_level") or "UNKNOWN").upper() for event in events)
+    threat_counts = Counter(
+        (event.get("threat_level") or "UNKNOWN").upper() for event in events
+    )
     sorted_events: List[Dict[str, Any]] = sorted(
         events,
         key=lambda event: _to_float(event.get("composite_score", 0.0)),

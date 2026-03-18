@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Protocol
 
-from app.clients.go_api_client import GoAPIClient
 from app.schemas import RedInjectionResponse
-from app.tools.event_tools import get_recent_events
-from app.tools.injection_tools import submit_synthetic_event
+
+
+class RedChainClient(Protocol):
+    def get_recent_events(
+        self, limit: int = 100, stage: str | None = None
+    ) -> List[Dict[str, Any]]: ...
+
+    def submit_synthetic_event(self, payload: Dict[str, Any]) -> Dict[str, Any]: ...
+
 
 ATTACK_TYPES = [
     "REPUTATION_LAUNDERING",
@@ -25,7 +31,9 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _build_payload(attack_type: str, seed_events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_payload(
+    attack_type: str, seed_events: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     seed = seed_events[0] if seed_events else {}
     payload: Dict[str, Any] = {
         "is_synthetic": True,
@@ -95,12 +103,12 @@ def _build_payload(attack_type: str, seed_events: List[Dict[str, Any]]) -> Dict[
 
 
 def run_red_injector_chain(
-    client: GoAPIClient,
+    client: RedChainClient,
     attack_type: str | None = None,
     dry_run: bool = True,
 ) -> RedInjectionResponse:
     selected_attack = attack_type or random.choice(ATTACK_TYPES)
-    seed_events = get_recent_events(client, limit=10)
+    seed_events = client.get_recent_events(limit=10)
     payload = _build_payload(selected_attack, seed_events)
 
     if dry_run:
@@ -112,12 +120,14 @@ def run_red_injector_chain(
             notes="Dry run enabled; payload not submitted.",
         )
 
-    result = submit_synthetic_event(client, payload)
+    result = client.submit_synthetic_event(payload)
     submitted = bool(result.get("submitted", True))
     return RedInjectionResponse(
         attack_type=selected_attack,
         payload=payload,
         submitted=submitted,
         target_endpoint="/api/v1/agents/injections/trigger",
-        notes="Payload submitted to Go API." if submitted else "Go API call returned not submitted.",
+        notes="Payload submitted to Go API."
+        if submitted
+        else "Go API call returned not submitted.",
     )
