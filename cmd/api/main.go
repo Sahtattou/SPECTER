@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	repo, err := storage.InitDB("./specter_intelligence.db")
+	repo, err := storage.InitDB("./specter_intelligence.db", "./internal/storage/migrations/001_init.sql")
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
