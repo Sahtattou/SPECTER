@@ -16,51 +16,51 @@
 
 ### 1.1 Config and bootstrapping
 - [ ] Implement environment parsing and validation in `internal/config/config.go`.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: Required env vars validated at startup with clear error messages.
+  - Done criteria: `Config` struct exists, but env parsing/validation functions and required-key checks are still missing.
 - [ ] Wire startup config into `cmd/api/main.go`, `cmd/worker/main.go`, and `cmd/collector/main.go`.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: All services boot with config object; no hardcoded values.
+  - Done criteria: Services currently boot, but still use hardcoded values and no shared config object injection.
 
 ### 1.2 Provider hardening
 - [ ] Finalize provider interface usage and provider registry in `internal/providers/provider.go`.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: Collector loops through providers consistently.
+  - Done criteria: Provider interface and source clients are implemented, but collector registry/orchestration loop is not wired.
 - [ ] Add robust rate limiting, retry/backoff, and timeout handling for all provider clients.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: 429 and transient network failures are retried safely.
-- [ ] Normalize output fields from all sources to the shared model in `pkg/models/threat.go`.
-  - Status: Todo
+  - Done criteria: Basic timeouts/retries exist per provider, but global 429 backoff/centralized policy is still missing.
+- [x] Normalize output fields from all sources to the shared model in `pkg/models/threat.go`.
+  - Status: Done
   - Owner: 
-  - Done criteria: All providers emit consistent IOC records.
+  - Done criteria: Providers return `models.ThreatRecord` and support target-type filtering via `Supports`.
 
 ### 1.3 Ingestion and dedup
-- [ ] Implement event normalization in `internal/ingest/normalizer.go`.
-  - Status: Todo
+- [x] Implement event normalization in `internal/ingest/normalizer.go`.
+  - Status: Done
   - Owner: 
-  - Done criteria: Input provider events produce canonical event objects.
+  - Done criteria: IOC type detection and envelope construction are implemented (`DetectType`, `BuildEnvelope`).
 - [ ] Implement dedup hash generation and duplicate filtering in `internal/ingest/dedupe.go`.
   - Status: Todo
   - Owner: 
   - Done criteria: Duplicate IOC events are skipped or merged deterministically.
 - [ ] Add unit tests for edge cases (empty IOC, malformed IOC, mixed case domains).
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: Tests cover at least 90% of ingest package logic.
+  - Done criteria: Basic type-detection test exists; edge-case and coverage-focused tests remain.
 
 ### 1.4 Storage layer
 - [ ] Expand schema in `internal/storage/migrations/001_init.sql` for full pipeline fields.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: Schema supports provenance, validation, scoring, and synthetic flags.
+  - Done criteria: Core fields are present, but advanced fields (e.g., score breakdown/domain age/history/injections) are not yet in Go schema.
 - [ ] Implement repository methods in `internal/storage/repository.go`.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: CRUD for events, queries for recent/scored/quarantined metrics.
+  - Done criteria: DB init + single `Save` insert are implemented; CRUD/query methods for events/metrics are still missing.
 - [ ] Add DB migration and rollback process.
   - Status: Todo
   - Owner: 
@@ -135,56 +135,82 @@
 ## 4) Python Agents (LangChain)
 
 ### 4.1 Agent service foundation
-- [ ] Expand FastAPI app in `agents/app/main.py` with route structure and health/readiness checks.
-  - Status: Todo
+- [x] Expand FastAPI app in `agents/app/main.py` with route structure and health/readiness checks.
+  - Status: Done
   - Owner: 
-  - Done criteria: Agent service exposes stable endpoints and OpenAPI docs.
-- [ ] Implement settings loader and env validation in `agents/app/config.py`.
-  - Status: Todo
+  - Done criteria: Health/readiness endpoints and mirror endpoints are implemented (`/health`, `/ready`, `/mirror/*`, `/api/v1/agents/injections/trigger`).
+- [x] Implement settings loader and env validation in `agents/app/config.py`.
+  - Status: Done
   - Owner: 
-  - Done criteria: Missing critical keys fail fast with clear messages.
-- [ ] Define strict request/response schemas in `agents/app/schemas.py`.
-  - Status: Todo
+  - Done criteria: Settings are loaded from environment with defaults including mirror controls (`RED_AGENT_INTERVAL_SECONDS`, `ADVERSARIAL_DB_PATH`).
+- [x] Define strict request/response schemas in `agents/app/schemas.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: All agent IO is validated by Pydantic models.
 
 ### 4.2 Go API integration
-- [ ] Implement HTTP client with retries/timeouts in `agents/app/clients/go_api_client.py`.
-  - Status: Todo
+- [x] Implement HTTP client with retries/timeouts in `agents/app/clients/go_api_client.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: All tool calls to Go API are centralized and resilient.
-- [ ] Implement event and injection tools in `agents/app/tools/event_tools.py` and `agents/app/tools/injection_tools.py`.
-  - Status: Todo
+- [x] Integrate event and injection operations directly through `GoAPIClient` and chain protocols.
+  - Status: Done
   - Owner: 
-  - Done criteria: Tools can read events and submit synthetic injections.
+  - Done criteria: Chains call `get_recent_events` and `submit_synthetic_event` through client/protocol layer; redundant wrappers removed.
 
 ### 4.3 Agent chains
-- [ ] Implement Blue Analyst chain in `agents/app/chains/blue_analyst_chain.py`.
-  - Status: Todo
+- [x] Implement Blue Analyst chain in `agents/app/chains/blue_analyst_chain.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: Produces concise analyst notes and cluster summaries.
-- [ ] Implement Red Injector chain in `agents/app/chains/red_injector_chain.py`.
-  - Status: Todo
+- [x] Implement Red Injector chain in `agents/app/chains/red_injector_chain.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: Generates realistic synthetic poisoning attempts.
-- [ ] Implement orchestrator in `agents/app/services/agent_runner.py`.
-  - Status: Todo
+- [x] Implement orchestrator in `agents/app/services/agent_runner.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: Can run selected chain by task type and return validated output.
 
+### 4.5 Adversarial mirror subsystem (Blue/Red/Detector)
+- [x] Implement shared queue manager in `agents/app/adversarial/queue_manager.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: Thread-safe `enqueue`, `dequeue(timeout)`, and `size` are used by Blue/Red/Detector.
+- [x] Implement Blue Agent enrichment in `agents/app/adversarial/blue_agent.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: Cross-source enrichment, source-skipping, Shodan pacing, and resilient error handling are present.
+- [x] Implement Red Agent daemon injector in `agents/app/adversarial/red_agent.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: Interval-based + manual injection with four attack types and injection logging to SQLite.
+- [x] Implement Detector daemon in `agents/app/adversarial/detector.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: Ordered quarantine rules, validated/quarantined stage updates, and injection detection updates are persisted.
+- [x] Wire adversarial storage/service in `agents/app/adversarial/storage.py` and `agents/app/adversarial/service.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: `mirror_events`, `injections`, `pipeline_runs` persistence and mirror API surfaces are operational.
+
 ### 4.4 Agent testing
-- [ ] Expand tests in `agents/tests/test_blue_agent.py` and `agents/tests/test_red_agent.py`.
-  - Status: Todo
+- [x] Expand tests in `agents/tests/test_blue_agent.py` and `agents/tests/test_red_agent.py`.
+  - Status: Done
   - Owner: 
   - Done criteria: Includes success, failure, and schema validation cases.
+- [x] Add adversarial mirror integration test in `agents/tests/test_adversarial_mirror.py`.
+  - Status: Done
+  - Owner: 
+  - Done criteria: All four synthetic attack types are injected and detected as caught.
 
 ## 5) Dashboard and UX
-- [ ] Build API-backed dashboard in `dashboards/streamlit_app.py`.
-  - Status: Todo
+- [x] Build API-backed dashboard in `dashboards/streamlit_app.py`.
+  - Status: Done
   - Owner: 
-  - Done criteria: Shows live feed, threat distribution, and pipeline metrics.
-- [ ] Add red-agent activity panel and manual injection trigger button.
-  - Status: Todo
+  - Done criteria: Shows live IOC feed, red-agent activity list, and pipeline metrics from agent mirror APIs.
+- [x] Add red-agent activity panel and manual injection trigger button.
+  - Status: Done
   - Owner: 
   - Done criteria: Demo can trigger and observe quarantine in real time.
 - [ ] Add STIX/PDF export actions from dashboard.
@@ -194,9 +220,9 @@
 
 ## 6) QA, Testing, and Reliability
 - [ ] Add integration tests for full flow: collect -> ingest -> validate -> score -> export.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: End-to-end tests pass in local and CI environments.
+  - Done criteria: Go provider tests and basic package tests pass; full collector->worker->export E2E remains pending.
 - [ ] Add contract tests between Go API and Python agent service.
   - Status: Todo
   - Owner: 
@@ -257,11 +283,11 @@
 - [ ] Ingestion + dedup + storage fully functional
 - [ ] Validation + scoring fully functional
 - [ ] API endpoints for events/metrics working
-- [ ] Dashboard wired to API
-- [ ] Red injection and quarantine visible in live demo
+- [x] Dashboard wired to API
+- [x] Red injection and quarantine visible in live demo
 
 ## Weekly checkpoints
 - [ ] Checkpoint 1: Data ingestion and storage complete
 - [ ] Checkpoint 2: Validation/scoring + API complete
-- [ ] Checkpoint 3: Agents integrated + dashboard complete
+- [x] Checkpoint 3: Agents integrated + dashboard complete
 - [ ] Checkpoint 4: Demo rehearsal + bug fixes + final docs
