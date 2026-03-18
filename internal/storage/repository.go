@@ -2,7 +2,10 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
 	_ "github.com/mattn/go-sqlite3"
@@ -12,48 +15,49 @@ type Repository struct {
 	DB *sql.DB
 }
 
-func InitDB(filepath string) (*Repository, error) {
-	db, err := sql.Open("sqlite3", filepath)
+func InitDB(dbPath string, migrationPath string) (*Repository, error) {
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	createTableQuery := `
-	CREATE TABLE IF NOT EXISTS iocs (
-		ioc_uuid TEXT PRIMARY KEY, raw_value TEXT, ioc_type TEXT,
-		source_name TEXT, source_url TEXT, source_query TEXT, 
-		raw_evidence TEXT, collected_at DATETIME, pipeline_stage TEXT,
-		is_synthetic BOOLEAN, poison_attack_type TEXT, poison_detected BOOLEAN,
-		detection_rule TEXT, corroboration_count INTEGER, domain_age_days INTEGER,
-		open_ports TEXT, asn TEXT, composite_score REAL, score_breakdown TEXT,
-		days_to_attack_estimate TEXT, threat_level TEXT, analyst_notes TEXT
-	);`
-
-	_, err = db.Exec(createTableQuery)
+	migrationSQL, err := os.ReadFile(migrationPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read migration file %s: %w", migrationPath, err)
 	}
 
+	_, err = db.Exec(string(migrationSQL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute migration: %w", err)
+	}
+
+	log.Println("[*] Database initialized and migrations applied successfully.")
 	return &Repository{DB: db}, nil
 }
 
-func (r *Repository) Save(env *models.IOCEnvelope) error {
+func (r *Repository) Save(event *models.ThreatEvent) error {
 	query := `
-	INSERT INTO iocs (
-		ioc_uuid, raw_value, ioc_type, source_name, source_url, source_query,
-		raw_evidence, collected_at, pipeline_stage, is_synthetic,
-		corroboration_count, open_ports, score_breakdown
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	INSERT INTO threat_events (
+		event_id, ioc_value, ioc_type, source_name, source_url, source_query,
+		raw_evidence_json, collected_at, corroboration_count, open_ports, asn,
+		is_synthetic, poison_attack_type, poison_detected, detection_rule,
+		composite_score, threat_level, days_to_attack, pipeline_stage
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	portsJSON, _ := json.Marshal(event.OpenPorts)
 
 	_, err := r.DB.Exec(query,
-		env.IOCUUID, env.RawValue, env.IOCType, env.SourceName, env.SourceURL, env.SourceQuery,
-		env.RawEvidence, env.CollectedAt, env.PipelineStage, env.IsSynthetic,
-		env.CorroborationCount, env.OpenPorts, env.ScoreBreakdown,
+		event.EventID, event.IOCValue, event.IOCType, event.SourceName,
+		event.SourceURL, event.SourceQuery, event.RawEvidenceJSON, event.CollectedAt,
+		event.CorroborationCount, string(portsJSON), event.ASN,
+		event.IsSynthetic, event.PoisonAttackType, event.PoisonDetected, event.DetectionRule,
+		event.CompositeScore, event.ThreatLevel, event.DaysToAttack, event.PipelineStage,
 	)
 
 	if err != nil {
-		log.Printf("Failed to save IOC: %v", err)
+		log.Printf("[-] Failed to save ThreatEvent %s: %v", event.EventID, err)
 		return err
 	}
+
 	return nil
 }
