@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-func TestCrtShProvider_Fetch(t *testing.T) {
+func TestCrtShProviderFetch(t *testing.T) {
 	provider := InitCrtShProvider()
 
-	targetDomain := "scanme.nmap.org"
+	targetDomain := "example.com"
 
 	record, err := provider.Fetch(targetDomain)
 

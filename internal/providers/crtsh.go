@@ -37,11 +37,11 @@ func (p *CrtShProvider) Fetch(target string) (*models.ThreatRecord, error) {
 		Get("https://crt.sh/")
 
 	if err != nil {
-		return &models.ThreatRecord{}, fmt.Errorf("crt.sh request failed: %w", err)
+		return nil, fmt.Errorf("crt.sh request failed: %w", err)
 	}
 
 	if resp.IsError() {
-		return &models.ThreatRecord{}, fmt.Errorf("crt.sh returned error: %s", resp.Status())
+		return nil, fmt.Errorf("crt.sh returned error: %s", resp.Status())
 	}
 
 	subdomains := make(map[string]bool)
