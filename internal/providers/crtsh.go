@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,75 +10,69 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-type CrtShEntry struct {
-	IssuerName string `json:"issuer_name"`
-	CommonName string `json:"common_name"`
-	NameValue  string `json:"name_value"`
+type crtShEntry struct {
+	NameValue string `json:"name_value"`
 }
 
-type CrtShProvider struct {
-	Client *resty.Client
+type CRTShProvider struct {
+	client *resty.Client
 }
 
-func InitCrtShProvider() *CrtShProvider {
-	return &CrtShProvider{
-		Client: resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
+func NewCRTShProvider() *CRTShProvider {
+	return &CRTShProvider{
+		client: resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
 	}
 }
 
-func (p *CrtShProvider) Name() string { return "crt.sh" }
+func (p *CRTShProvider) Name() string { return "crt.sh" }
 
-func (p *CrtShProvider) Fetch(target string) (*models.ThreatRecord, error) {
-	var result []CrtShEntry
+func (p *CRTShProvider) Collect(ctx context.Context) ([]models.Threat, error) {
+	target := "%.example"
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = deadline
+	}
 
-	resp, err := p.Client.R().
+	var result []crtShEntry
+	resp, err := p.client.R().
+		SetContext(ctx).
 		SetQueryParam("q", target).
 		SetQueryParam("output", "json").
 		SetResult(&result).
 		Get("https://crt.sh/")
-
 	if err != nil {
 		return nil, fmt.Errorf("crt.sh request failed: %w", err)
 	}
-
 	if resp.IsError() {
 		return nil, fmt.Errorf("crt.sh returned error: %s", resp.Status())
 	}
 
-	subdomains := make(map[string]bool)
-
+	seen := make(map[string]struct{})
+	threats := make([]models.Threat, 0, len(result))
 	for _, entry := range result {
 		names := strings.Split(entry.NameValue, "\n")
-		for _, name := range names {
-			cleanName := strings.TrimSpace(name)
-
-			cleanName = strings.ReplaceAll(cleanName, "*.", "")
-
-			if cleanName != "" {
-				subdomains[cleanName] = true
+		for _, n := range names {
+			domain := strings.TrimSpace(strings.TrimPrefix(n, "*."))
+			if domain == "" {
+				continue
 			}
+			if _, ok := seen[domain]; ok {
+				continue
+			}
+			seen[domain] = struct{}{}
+			threats = append(threats, models.Threat{
+				IOCValue:    domain,
+				IOCType:     "domain",
+				SourceName:  p.Name(),
+				SourceURL:   "https://crt.sh/",
+				SourceQuery: target,
+				RawEvidence: map[string]any{
+					"name_value": entry.NameValue,
+				},
+				CollectedAt:   time.Now().UTC(),
+				Corroboration: 1,
+			})
 		}
 	}
 
-	var uniqueSubdomains []string
-	for sub := range subdomains {
-		uniqueSubdomains = append(uniqueSubdomains, sub)
-	}
-
-	return &models.ThreatRecord{
-		Source:      p.Name(),
-		Target:      target,
-		Confidence:  0,
-		IsMalicious: false,
-		LastSeen:    time.Now(),
-		Details: map[string]interface{}{
-			"certificates_found": len(result),
-			"unique_subdomains":  uniqueSubdomains,
-			"subdomain_count":    len(uniqueSubdomains),
-		},
-	}, nil
-}
-
-func (p *CrtShProvider) Supports(targetType string) bool {
-	return targetType == "domain"
+	return threats, nil
 }

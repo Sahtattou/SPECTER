@@ -1,13 +1,14 @@
 package providers
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"github.com/joho/godotenv"
 )
 
-func TestURLhausProviderFetch(t *testing.T) {
+func TestURLhausProviderCollect(t *testing.T) {
 	_ = godotenv.Load("../../.env")
 
 	apiKey := os.Getenv("URLHAUS_API_KEY")
@@ -15,25 +16,23 @@ func TestURLhausProviderFetch(t *testing.T) {
 		t.Skip("Skipping URLhaus test: URLHAUS_API_KEY not set")
 	}
 
-	provider := InitURLhausProvider(apiKey)
+	provider := NewURLHausProvider(apiKey)
 
-	target := "example.com"
-
-	record, err := provider.Fetch(target)
+	records, err := provider.Collect(context.Background())
 
 	if err != nil {
-		t.Fatalf("Fetch returned an error: %v", err)
+		t.Fatalf("Collect returned an error: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected at least one threat from urlhaus collect")
+	}
+	record := records[0]
+
+	if record.IOCType != "domain" {
+		t.Errorf("Expected IOCType to be domain, got %s", record.IOCType)
 	}
 
-	if record == nil {
-		t.Fatal("Expected a ThreatRecord pointer, got nil")
-	}
-
-	if record.Target != target {
-		t.Errorf("Expected Target to be %s, got %s", target, record.Target)
-	}
-
-	if record.Source != "URLhaus" {
-		t.Errorf("Expected Source to be URLhaus, got %s", record.Source)
+	if record.SourceName != "urlhaus" {
+		t.Errorf("Expected SourceName to be urlhaus, got %s", record.SourceName)
 	}
 }

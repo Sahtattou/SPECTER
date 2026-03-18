@@ -4,23 +4,28 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Sahtattou/SPECTER/internal/api"
+	"github.com/Sahtattou/SPECTER/internal/config"
 	"github.com/Sahtattou/SPECTER/internal/storage"
 )
 
 func main() {
-	repo, err := storage.InitDB("./specter_intelligence.db", "./internal/storage/migrations/001_init.sql")
+	cfg := config.Load()
+
+	repo, err := storage.NewSQLiteRepository(cfg.DBDSN)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("init sqlite repository: %v", err)
 	}
-	defer repo.DB.Close()
+	defer func() {
+		if err := repo.Close(); err != nil {
+			log.Printf("close repository: %v", err)
+		}
+	}()
 
-	mux := http.NewServeMux()
+	server := &api.Server{Repo: repo}
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "SPECTER GO API ONLINE"}`))
-	})
-
-	log.Println("[*] SPECTER Go API Server running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Printf("api listening on :%s", cfg.APIPort)
+	if err := http.ListenAndServe(":"+cfg.APIPort, server.Router()); err != nil {
+		log.Fatal(err)
+	}
 }

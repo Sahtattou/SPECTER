@@ -1,13 +1,14 @@
 package providers
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"github.com/joho/godotenv"
 )
 
-func TestAbuseIPDBProviderFetch(t *testing.T) {
+func TestAbuseIPDBProviderCollect(t *testing.T) {
 	_ = godotenv.Load("../../.env")
 
 	apiKey := os.Getenv("ABUSEIPDB_API_KEY")
@@ -15,28 +16,26 @@ func TestAbuseIPDBProviderFetch(t *testing.T) {
 		t.Skip("ABUSEIPDB_API_KEY not set. Skipping integration test.")
 	}
 
-	provider := InitAbuseIPDBProvider(apiKey)
+	provider := NewAbuseIPDBProvider(apiKey)
 
-	targetIP := "8.8.8.8"
-	record, err := provider.Fetch(targetIP)
+	records, err := provider.Collect(context.Background())
 
 	if err != nil {
-		t.Fatalf("Fetch returned an error: %v", err)
+		t.Fatalf("Collect returned an error: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected at least one threat from abuseipdb collect")
+	}
+	record := records[0]
+
+	if record.IOCType != "ip" {
+		t.Errorf("Expected IOCType to be ip, got %s", record.IOCType)
 	}
 
-	if record == nil {
-		t.Fatal("Expected a ThreatRecord, got nil")
+	if record.SourceName != "abuseipdb" {
+		t.Errorf("Expected SourceName to be abuseipdb, got %s", record.SourceName)
 	}
-
-	if record.Target != targetIP {
-		t.Errorf("Expected Target to be %s, got %s", targetIP, record.Target)
-	}
-
-	if record.Source != "AbuseIPDB" {
-		t.Errorf("Expected Source to be AbuseIPDB, got %s", record.Source)
-	}
-
-	if record.IsMalicious {
-		t.Errorf("Expected 8.8.8.8 to NOT be malicious")
+	if len(record.RawEvidence) == 0 {
+		t.Error("Expected RawEvidence map to be populated")
 	}
 }

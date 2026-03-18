@@ -1,29 +1,36 @@
 package providers
 
 import (
+	"context"
+	"strings"
 	"testing"
 )
 
-func TestCrtShProviderFetch(t *testing.T) {
-	provider := InitCrtShProvider()
+func TestCrtShProviderCollect(t *testing.T) {
+	provider := NewCRTShProvider()
 
-	targetDomain := "example.com"
-
-	record, err := provider.Fetch(targetDomain)
+	records, err := provider.Collect(context.Background())
 
 	if err != nil {
-		t.Fatalf("Fetch returned an error: %v", err)
+		if strings.Contains(err.Error(), "503") || strings.Contains(strings.ToLower(err.Error()), "service unavailable") {
+			t.Skipf("Skipping crt.sh integration test due to remote outage: %v", err)
+		}
+		t.Fatalf("Collect returned an error: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected at least one threat from crtsh collect")
+	}
+	record := records[0]
+
+	if record.IOCType != "domain" {
+		t.Errorf("Expected IOCType domain, got %s", record.IOCType)
 	}
 
-	if record.Target != targetDomain {
-		t.Errorf("Expected Target to be %s, got %s", targetDomain, record.Target)
+	if record.SourceName != "crt.sh" {
+		t.Errorf("Expected SourceName to be crt.sh, got %s", record.SourceName)
 	}
 
-	if record.Source != "crt.sh" {
-		t.Errorf("Expected Source to be crt.sh, got %s", record.Source)
-	}
-
-	if count, ok := record.Details["subdomain_count"].(int); !ok || count == 0 {
-		t.Error("Expected to find subdomains, but got 0 or invalid type")
+	if len(record.RawEvidence) == 0 {
+		t.Error("Expected raw evidence to be populated")
 	}
 }

@@ -1,34 +1,33 @@
 package providers
 
 import (
+	"context"
 	"os"
 	"testing"
 )
 
-func TestOTXProvider_Fetch(t *testing.T) {
+func TestOTXProvider_Collect(t *testing.T) {
 	apiKey := os.Getenv("OTX_API_KEY")
 	if apiKey == "" {
 		t.Skip("Skipping OTX test: OTX_API_KEY not set")
 	}
 
-	provider := InitOTXProvider(apiKey)
-	target := "example.com"
-
-	record, err := provider.Fetch(target)
+	provider := NewOTXProvider(apiKey)
+	records, err := provider.Collect(context.Background())
 
 	if err != nil {
-		t.Fatalf("Fetch returned an error: %v", err)
+		t.Fatalf("Collect returned an error: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected at least one threat from otx collect")
+	}
+	record := records[0]
+
+	if record.SourceName != "otx" {
+		t.Errorf("Expected SourceName to be otx, got %s", record.SourceName)
 	}
 
-	if record == nil {
-		t.Fatal("Expected a ThreatRecord pointer, got nil")
-	}
-
-	if record.Target != target {
-		t.Errorf("Expected Target to be %s, got %s", target, record.Target)
-	}
-
-	if record.Source != "AlienVault OTX" {
-		t.Errorf("Expected Source to be AlienVault OTX, got %s", record.Source)
+	if record.IOCType == "" {
+		t.Error("Expected IOCType to be set")
 	}
 }

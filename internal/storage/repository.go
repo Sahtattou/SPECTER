@@ -1,63 +1,255 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"log"
-	"os"
+	"errors"
+	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
-	_ "github.com/mattn/go-sqlite3"
 )
 
-type Repository struct {
-	DB *sql.DB
+var ErrNotFound = errors.New("record not found")
+
+type Repository interface {
+	UpsertRecord(ctx context.Context, rec models.ThreatRecord) error
+	ListByStage(ctx context.Context, stage string) ([]models.ThreatRecord, error)
+	ListAll(ctx context.Context) ([]models.ThreatRecord, error)
+	GetByEventID(ctx context.Context, eventID string) (models.ThreatRecord, error)
+	Close() error
 }
 
-func InitDB(dbPath string, migrationPath string) (*Repository, error) {
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	migrationSQL, err := os.ReadFile(migrationPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read migration file %s: %w", migrationPath, err)
-	}
-
-	_, err = db.Exec(string(migrationSQL))
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute migration: %w", err)
-	}
-
-	log.Println("[*] Database initialized and migrations applied successfully.")
-	return &Repository{DB: db}, nil
+type SQLiteRepository struct {
+	db *sql.DB
 }
 
-func (r *Repository) Save(event *models.ThreatEvent) error {
-	query := `
-	INSERT INTO threat_events (
-		event_id, ioc_value, ioc_type, source_name, source_url, source_query,
-		raw_evidence_json, collected_at, corroboration_count, open_ports, asn,
-		is_synthetic, poison_attack_type, poison_detected, detection_rule,
-		composite_score, threat_level, days_to_attack, pipeline_stage
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	portsJSON, _ := json.Marshal(event.OpenPorts)
-
-	_, err := r.DB.Exec(query,
-		event.EventID, event.IOCValue, event.IOCType, event.SourceName,
-		event.SourceURL, event.SourceQuery, event.RawEvidenceJSON, event.CollectedAt,
-		event.CorroborationCount, string(portsJSON), event.ASN,
-		event.IsSynthetic, event.PoisonAttackType, event.PoisonDetected, event.DetectionRule,
-		event.CompositeScore, event.ThreatLevel, event.DaysToAttack, event.PipelineStage,
-	)
-
+func NewSQLiteRepository(dsn string) (*SQLiteRepository, error) {
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		log.Printf("[-] Failed to save ThreatEvent %s: %v", event.EventID, err)
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	r := &SQLiteRepository{db: db}
+	if err := r.migrate(context.Background()); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *SQLiteRepository) migrate(ctx context.Context) error {
+	const ddl = `
+CREATE TABLE IF NOT EXISTS threat_records (
+    event_id TEXT PRIMARY KEY,
+    ioc_value TEXT NOT NULL,
+    ioc_type TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    source_url TEXT NOT NULL DEFAULT '',
+    source_query TEXT NOT NULL DEFAULT '',
+    raw_evidence_json TEXT NOT NULL DEFAULT '{}',
+    collected_at DATETIME NOT NULL,
+    corroboration_count INTEGER NOT NULL DEFAULT 0,
+    open_ports_json TEXT NOT NULL DEFAULT '[]',
+    asn TEXT NOT NULL DEFAULT '',
+    is_synthetic INTEGER NOT NULL DEFAULT 0,
+    poison_attack_type TEXT NOT NULL DEFAULT '',
+    poison_detected INTEGER NULL,
+    detection_rule TEXT NOT NULL DEFAULT '',
+    composite_score REAL NULL,
+    threat_level TEXT NOT NULL DEFAULT '',
+    days_to_attack TEXT NOT NULL DEFAULT '',
+    pipeline_stage TEXT NOT NULL DEFAULT 'ingested',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_threat_records_stage ON threat_records(pipeline_stage);
+CREATE INDEX IF NOT EXISTS idx_threat_records_ioc ON threat_records(ioc_type, ioc_value);
+CREATE INDEX IF NOT EXISTS idx_threat_records_collected_at ON threat_records(collected_at);
+`
+	_, err := r.db.ExecContext(ctx, ddl)
+	return err
+}
+
+func (r *SQLiteRepository) Close() error { return r.db.Close() }
+
+func (r *SQLiteRepository) UpsertRecord(ctx context.Context, rec models.ThreatRecord) error {
+	ports, err := json.Marshal(rec.OpenPorts)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	const q = `
+INSERT INTO threat_records (
+  event_id, ioc_value, ioc_type, source_name, source_url, source_query,
+  raw_evidence_json, collected_at, corroboration_count, open_ports_json, asn,
+  is_synthetic, poison_attack_type, poison_detected, detection_rule,
+  composite_score, threat_level, days_to_attack, pipeline_stage, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(event_id) DO UPDATE SET
+  ioc_value=excluded.ioc_value,
+  ioc_type=excluded.ioc_type,
+  source_name=excluded.source_name,
+  source_url=excluded.source_url,
+  source_query=excluded.source_query,
+  raw_evidence_json=excluded.raw_evidence_json,
+  collected_at=excluded.collected_at,
+  corroboration_count=excluded.corroboration_count,
+  open_ports_json=excluded.open_ports_json,
+  asn=excluded.asn,
+  is_synthetic=excluded.is_synthetic,
+  poison_attack_type=excluded.poison_attack_type,
+  poison_detected=excluded.poison_detected,
+  detection_rule=excluded.detection_rule,
+  composite_score=excluded.composite_score,
+  threat_level=excluded.threat_level,
+  days_to_attack=excluded.days_to_attack,
+  pipeline_stage=excluded.pipeline_stage,
+  updated_at=excluded.updated_at
+`
+	_, err = r.db.ExecContext(ctx, q,
+		rec.EventID, rec.IOCValue, rec.IOCType, rec.SourceName, rec.SourceURL, rec.SourceQuery,
+		rec.RawEvidenceJSON, rec.CollectedAt.UTC(), rec.CorroborationCount, string(ports), rec.ASN,
+		boolToInt(rec.IsSynthetic), rec.PoisonAttackType, boolPtrToNullInt(rec.PoisonDetected), rec.DetectionRule,
+		rec.CompositeScore, rec.ThreatLevel, rec.DaysToAttack, rec.PipelineStage, rec.CreatedAt.UTC(), rec.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (r *SQLiteRepository) ListByStage(ctx context.Context, stage string) ([]models.ThreatRecord, error) {
+	const q = `
+SELECT event_id, ioc_value, ioc_type, source_name, source_url, source_query,
+       raw_evidence_json, collected_at, corroboration_count, open_ports_json, asn,
+       is_synthetic, poison_attack_type, poison_detected, detection_rule,
+       composite_score, threat_level, days_to_attack, pipeline_stage, created_at, updated_at
+FROM threat_records
+WHERE pipeline_stage = ?
+ORDER BY collected_at DESC
+`
+	rows, err := r.db.QueryContext(ctx, q, stage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *SQLiteRepository) ListAll(ctx context.Context) ([]models.ThreatRecord, error) {
+	const q = `
+SELECT event_id, ioc_value, ioc_type, source_name, source_url, source_query,
+       raw_evidence_json, collected_at, corroboration_count, open_ports_json, asn,
+       is_synthetic, poison_attack_type, poison_detected, detection_rule,
+       composite_score, threat_level, days_to_attack, pipeline_stage, created_at, updated_at
+FROM threat_records
+ORDER BY collected_at DESC
+`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *SQLiteRepository) GetByEventID(ctx context.Context, eventID string) (models.ThreatRecord, error) {
+	const q = `
+SELECT event_id, ioc_value, ioc_type, source_name, source_url, source_query,
+       raw_evidence_json, collected_at, corroboration_count, open_ports_json, asn,
+       is_synthetic, poison_attack_type, poison_detected, detection_rule,
+       composite_score, threat_level, days_to_attack, pipeline_stage, created_at, updated_at
+FROM threat_records WHERE event_id = ? LIMIT 1
+`
+	row := r.db.QueryRowContext(ctx, q, eventID)
+	rec, err := scanOne(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.ThreatRecord{}, ErrNotFound
+		}
+		return models.ThreatRecord{}, err
+	}
+	return rec, nil
+}
+
+func scanRows(rows *sql.Rows) ([]models.ThreatRecord, error) {
+	var out []models.ThreatRecord
+	for rows.Next() {
+		rec, err := scanWith(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func scanOne(row interface{ Scan(dest ...any) error }) (models.ThreatRecord, error) {
+	return scanWith(row.Scan)
+}
+
+func scanWith(scan func(dest ...any) error) (models.ThreatRecord, error) {
+	var rec models.ThreatRecord
+	var portsJSON string
+	var isSyntheticInt int
+	var poisonDetected sql.NullInt64
+	var composite sql.NullFloat64
+	var collectedAt, createdAt, updatedAt time.Time
+
+	err := scan(
+		&rec.EventID, &rec.IOCValue, &rec.IOCType, &rec.SourceName, &rec.SourceURL, &rec.SourceQuery,
+		&rec.RawEvidenceJSON, &collectedAt, &rec.CorroborationCount, &portsJSON, &rec.ASN,
+		&isSyntheticInt, &rec.PoisonAttackType, &poisonDetected, &rec.DetectionRule,
+		&composite, &rec.ThreatLevel, &rec.DaysToAttack, &rec.PipelineStage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return models.ThreatRecord{}, err
+	}
+
+	rec.IsSynthetic = isSyntheticInt == 1
+	rec.PoisonDetected = nullIntToBoolPtr(poisonDetected)
+	if composite.Valid {
+		v := composite.Float64
+		rec.CompositeScore = &v
+	}
+	rec.CollectedAt, rec.CreatedAt, rec.UpdatedAt = collectedAt.UTC(), createdAt.UTC(), updatedAt.UTC()
+
+	if portsJSON == "" {
+		portsJSON = "[]"
+	}
+	if err := json.Unmarshal([]byte(portsJSON), &rec.OpenPorts); err != nil {
+		return models.ThreatRecord{}, err
+	}
+
+	return rec, nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func boolPtrToNullInt(v *bool) any {
+	if v == nil {
+		return nil
+	}
+	if *v {
+		return 1
+	}
+	return 0
+}
+
+func nullIntToBoolPtr(v sql.NullInt64) *bool {
+	if !v.Valid {
+		return nil
+	}
+	b := v.Int64 == 1
+	return &b
 }

@@ -1,67 +1,68 @@
 package config
 
 import (
-	"log"
 	"os"
 	"strconv"
-	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AbuseIPDBKey string
-	OTXKey       string
-	ShodanKey    string
-
 	APIPort                   string
 	WorkerConcurrency         int
 	CollectionIntervalSeconds int
 	DBDSN                     string
 
+	AbuseIPDBAPIKey string
+	OTXAPIKey       string
+	ShodanAPIKey    string
+	URLHausAPIKey   string
+
 	LogLevel string
 	DemoMode bool
 }
 
-func LoadConfig() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("[!] No .env file found, relying on system environment variables.")
-	}
-
-	return &Config{
-		AbuseIPDBKey: getEnv("ABUSEIPDB_API_KEY", ""),
-		OTXKey:       getEnv("OTX_API_KEY", ""),
-		ShodanKey:    getEnv("SHODAN_API_KEY", ""),
-
-		APIPort:                   getEnv("API_PORT", "8080"),
-		WorkerConcurrency:         getEnvAsInt("WORKER_CONCURRENCY", 4),
-		CollectionIntervalSeconds: getEnvAsInt("COLLECTION_INTERVAL_SECONDS", 60),
-		DBDSN:                     getEnv("DB_DSN", "./specter_intelligence.db"),
-
-		LogLevel: getEnv("LOG_LEVEL", "INFO"),
-		DemoMode: getEnvAsBool("DEMO_MODE", true),
+func Load() Config {
+	return Config{
+		APIPort:                   env("API_PORT", "8080"),
+		WorkerConcurrency:         envInt("WORKER_CONCURRENCY", 4),
+		CollectionIntervalSeconds: envInt("COLLECTION_INTERVAL_SECONDS", 60),
+		DBDSN:                     env("DB_DSN", "file:specter.db?_busy_timeout=5000&_journal_mode=WAL"),
+		AbuseIPDBAPIKey:           os.Getenv("ABUSEIPDB_API_KEY"),
+		OTXAPIKey:                 os.Getenv("OTX_API_KEY"),
+		ShodanAPIKey:              os.Getenv("SHODAN_API_KEY"),
+		URLHausAPIKey:             os.Getenv("URLHAUS_API_KEY"),
+		LogLevel:                  env("LOG_LEVEL", "INFO"),
+		DemoMode:                  envBool("DEMO_MODE", true),
 	}
 }
 
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
+func env(k, def string) string {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
 	}
-	return fallback
+	return v
 }
 
-func getEnvAsInt(key string, fallback int) int {
-	valueStr := getEnv(key, "")
-	if value, err := strconv.Atoi(valueStr); err == nil {
-		return value
+func envInt(k string, def int) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
 	}
-	return fallback
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return i
 }
 
-func getEnvAsBool(key string, fallback bool) bool {
-	valueStr := getEnv(key, "")
-	if value, err := strconv.ParseBool(strings.ToLower(valueStr)); err == nil {
-		return value
+func envBool(k string, def bool) bool {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
 	}
-	return fallback
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
 }
