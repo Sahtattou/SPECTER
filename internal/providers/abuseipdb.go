@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -43,6 +44,11 @@ func InitAbuseIPDBProvider(apiKey string) *AbuseIPDBProvider {
 func (p *AbuseIPDBProvider) Name() string { return "AbuseIPDB" }
 
 func (p *AbuseIPDBProvider) Fetch(ip string) (*models.ThreatRecord, error) {
+
+	if !p.Supports(ip) {
+		return nil, fmt.Errorf("%s does not support target: %s", p.Name(), ip)
+	}
+
 	client := resty.New().SetTimeout(10 * time.Second)
 
 	var result AbuseIPDBResponse
@@ -84,4 +90,8 @@ func (p *AbuseIPDBProvider) Fetch(ip string) (*models.ThreatRecord, error) {
 			"num_distinct_users": data.NumDistinctUsers,
 		},
 	}, nil
+}
+
+func (p *AbuseIPDBProvider) Supports(target string) bool {
+	return net.ParseIP(target) != nil
 }

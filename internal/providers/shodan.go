@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
@@ -22,6 +23,11 @@ func InitShodanProvider(apiKey string) *ShodanProvider {
 func (s *ShodanProvider) Name() string { return "shodan" }
 
 func (s *ShodanProvider) Fetch(ip string) (*models.ThreatRecord, error) {
+
+	if !p.Supports(ip) {
+		return nil, fmt.Errorf("%s does not support target: %s", p.Name(), ip)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -47,6 +53,6 @@ func (s *ShodanProvider) Fetch(ip string) (*models.ThreatRecord, error) {
 		}}, nil
 }
 
-func (p *ShodanProvider) Supports(targetType string) bool {
-	return targetType == "ip"
+func (p *ShodanProvider) Supports(target string) bool {
+	return net.ParseIP(target) != nil
 }

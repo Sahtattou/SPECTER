@@ -2,6 +2,8 @@ package providers
 
 import (
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
@@ -94,6 +96,10 @@ func (p *URLhausProvider) Fetch(target string) (*models.ThreatRecord, error) {
 	}, nil
 }
 
-func (p *URLhausProvider) Supports(targetType string) bool {
-	return targetType == "ip" || targetType == "domain"
+func (p *URLhausProvider) Supports(target string) bool {
+	isIP := net.ParseIP(target) != nil
+	hasProtocol := strings.HasPrefix(target, "http")
+	hasDot := strings.Contains(target, ".")
+
+	return !isIP && (hasProtocol || hasDot)
 }

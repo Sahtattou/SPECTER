@@ -3,6 +3,7 @@ package providers
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
@@ -93,6 +94,6 @@ func (p *OTXProvider) Fetch(target string) (*models.ThreatRecord, error) {
 	}, nil
 }
 
-func (p *OTXProvider) Supports(targetType string) bool {
-	return targetType == "ip" || targetType == "domain"
+func (p *OTXProvider) Supports(target string) bool {
+	return len(target) > 3 && strings.Contains(target, ".") || net.ParseIP(target) != nil
 }
