@@ -10,8 +10,8 @@ PIP := $(PYTHON) -m pip
 	build-api build-worker build-collector build \
 	run-agents run-dashboard \
 	test-go test-py test \
-	fmt vet tidy lint check-go check \
-	seed clean bootstrap
+	fmt vet tidy lint check-go check ci-check \
+	seed demo-rehearse offline-load bundle clean bootstrap
 
 default: help
 
@@ -91,6 +91,18 @@ check: check-go test-py ## Run full repo checks (Go + Python tests)
 
 seed: ## Run demo seed helper script
 	./scripts/seed_demo_data.sh
+
+demo-rehearse: ## Run demo smoke rehearsal flow
+	./scripts/rehearse_demo.sh
+
+offline-load: ## Load offline snapshot dataset into API
+	./scripts/load_offline_snapshot.sh
+
+bundle: ## Create submission artifact bundle directory
+	./scripts/create_artifact_bundle.sh
+
+ci-check: ## Run CI-equivalent local checks
+	./scripts/ci_check.sh
 
 clean: ## Clean build outputs and Go caches
 	go clean -cache -testcache

@@ -2,22 +2,64 @@ package scoring
 
 import "github.com/Sahtattou/SPECTER/pkg/models"
 
+const (
+	penaltyPoisonDetected        = 100.0
+	penaltySuspiciousTimestamp   = 35.0
+	penaltyTTPBannerMismatch     = 45.0
+	bonusHighRiskPortPrimary     = 20.0
+	bonusHighRiskPortSecondary   = 8.0
+	bonusCorroborationMultiplier = 10.0
+)
+
+var highRiskPrimaryPorts = map[int]struct{}{
+	50050: {},
+	40056: {},
+	8888:  {},
+	4444:  {},
+}
+
+var highRiskSecondaryPorts = map[int]struct{}{
+	22:   {},
+	3389: {},
+	8080: {},
+}
+
 func Score(rec models.ThreatRecord) models.ThreatRecord {
 	if rec.PipelineStage == "quarantined" {
 		return rec
 	}
 
 	score := 20.0
-	score += float64(rec.CorroborationCount * 10)
+	score += float64(rec.CorroborationCount) * bonusCorroborationMultiplier
 
 	if rec.IsSynthetic {
 		score -= 40
 	}
+
+	if rec.PoisonDetected != nil && *rec.PoisonDetected {
+		score -= penaltyPoisonDetected
+	}
+
+	switch rec.DetectionRule {
+	case "SUSPICIOUS_TIMESTAMP":
+		score -= penaltySuspiciousTimestamp
+	case "TTP_BANNER_MISMATCH":
+		score -= penaltyTTPBannerMismatch
+	}
+
+	primaryMatched := false
 	for _, p := range rec.OpenPorts {
-		if p == 50050 || p == 40056 || p == 8888 {
-			score += 20
-			break
+		if _, ok := highRiskPrimaryPorts[p]; ok {
+			score += bonusHighRiskPortPrimary
+			primaryMatched = true
+			continue
 		}
+		if _, ok := highRiskSecondaryPorts[p]; ok {
+			score += bonusHighRiskPortSecondary
+		}
+	}
+	if primaryMatched {
+		score += 3
 	}
 
 	if score < 0 {
@@ -30,7 +72,11 @@ func Score(rec models.ThreatRecord) models.ThreatRecord {
 	rec.CompositeScore = &score
 	rec.ThreatLevel = mapLevel(score)
 	rec.DaysToAttack = mapDays(score)
-	rec.PipelineStage = "scored"
+	if rec.PoisonDetected != nil && *rec.PoisonDetected {
+		rec.PipelineStage = "quarantined"
+	} else {
+		rec.PipelineStage = "scored"
+	}
 	return rec
 }
 

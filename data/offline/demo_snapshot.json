@@ -1,0 +1,39 @@
+[
+  {
+    "ioc_type": "domain",
+    "ioc_value": "paypal-secure-4821.com",
+    "source_name": "offline_snapshot",
+    "raw_evidence": {
+      "domain_age_days": 0,
+      "cert_metadata": {
+        "issuer": "Let's Encrypt"
+      }
+    },
+    "is_synthetic": true,
+    "poison_attack_type": "GHOST_DOMAIN",
+    "corroboration_count": 1
+  },
+  {
+    "ioc_type": "ip",
+    "ioc_value": "198.51.100.42",
+    "source_name": "offline_snapshot",
+    "open_ports": [50050, 80],
+    "raw_evidence": {
+      "banner": "Cloudflare edge node"
+    },
+    "is_synthetic": true,
+    "poison_attack_type": "TTP_MISMATCH",
+    "corroboration_count": 3
+  },
+  {
+    "ioc_type": "ip",
+    "ioc_value": "45.9.148.114",
+    "source_name": "offline_snapshot",
+    "open_ports": [22, 3389],
+    "raw_evidence": {
+      "abuseConfidenceScore": 85
+    },
+    "is_synthetic": false,
+    "corroboration_count": 4
+  }
+]

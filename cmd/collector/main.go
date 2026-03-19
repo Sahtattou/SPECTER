@@ -42,6 +42,9 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 
+		seenHashes := make(map[string]struct{})
+		var seenMu sync.Mutex
+
 		// Buffered channel prevents goroutine blocking on send.
 		results := make(chan string, len(providerList))
 
@@ -49,7 +52,6 @@ func main() {
 		wg.Add(len(providerList))
 
 		for _, p := range providerList {
-			p := p // capture
 			go func() {
 				defer wg.Done()
 
@@ -61,11 +63,25 @@ func main() {
 				}
 
 				success := 0
+				skippedDuplicates := 0
 				for _, t := range threats {
 					rec, err := ingest.NormalizeThreat(t)
 					if err != nil {
 						continue
 					}
+
+					h := ingest.DedupeHash(rec)
+					seenMu.Lock()
+					_, exists := seenHashes[h]
+					if !exists {
+						seenHashes[h] = struct{}{}
+					}
+					seenMu.Unlock()
+					if exists {
+						skippedDuplicates++
+						continue
+					}
+
 					rec = validation.Detect(rec)
 					rec = scoring.Score(rec)
 					rec.UpdatedAt = time.Now().UTC()
@@ -77,6 +93,7 @@ func main() {
 
 				results <- p.Name() + " collected=" + itoa(len(threats)) +
 					" persisted=" + itoa(success) +
+					" dedup_skipped=" + itoa(skippedDuplicates) +
 					" elapsed=" + time.Since(start).String()
 			}()
 		}

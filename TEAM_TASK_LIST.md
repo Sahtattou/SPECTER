@@ -25,14 +25,14 @@
   - Done criteria: Services currently boot, but still use hardcoded values and no shared config object injection.
 
 ### 1.2 Provider hardening
-- [ ] Finalize provider interface usage and provider registry in `internal/providers/provider.go`.
-  - Status: In Progress
+- [x] Finalize provider interface usage and provider registry in `internal/providers/provider.go`.
+  - Status: Done
   - Owner: 
-  - Done criteria: Provider interface and source clients are implemented, but collector registry/orchestration loop is not wired.
+  - Done criteria: `Provider` interface is implemented and collector loops across all providers in `cmd/collector/main.go`.
 - [ ] Add robust rate limiting, retry/backoff, and timeout handling for all provider clients.
   - Status: In Progress
   - Owner: 
-  - Done criteria: Basic timeouts/retries exist per provider, but global 429 backoff/centralized policy is still missing.
+  - Done criteria: Timeouts/retries are implemented per provider, but centralized 429/backoff policy is still missing.
 - [x] Normalize output fields from all sources to the shared model in `pkg/models/threat.go`.
   - Status: Done
   - Owner: 
@@ -44,9 +44,9 @@
   - Owner: 
   - Done criteria: IOC type detection and envelope construction are implemented (`DetectType`, `BuildEnvelope`).
 - [ ] Implement dedup hash generation and duplicate filtering in `internal/ingest/dedupe.go`.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Duplicate IOC events are skipped or merged deterministically.
+  - Done criteria: Dedupe hash exists and collector now enforces per-cycle duplicate skipping before persistence.
 - [ ] Add unit tests for edge cases (empty IOC, malformed IOC, mixed case domains).
   - Status: In Progress
   - Owner: 
@@ -57,10 +57,10 @@
   - Status: In Progress
   - Owner: 
   - Done criteria: Core fields are present, but advanced fields (e.g., score breakdown/domain age/history/injections) are not yet in Go schema.
-- [ ] Implement repository methods in `internal/storage/repository.go`.
-  - Status: In Progress
+- [x] Implement repository methods in `internal/storage/repository.go`.
+  - Status: Done
   - Owner: 
-  - Done criteria: DB init + single `Save` insert are implemented; CRUD/query methods for events/metrics are still missing.
+  - Done criteria: SQLite repository implements migration bootstrap, upsert, list-by-stage, list-all, and get-by-id queries.
 - [ ] Add DB migration and rollback process.
   - Status: Todo
   - Owner: 
@@ -68,53 +68,53 @@
 
 ### 1.5 Validation and scoring
 - [ ] Implement detection rules in `internal/validation/detector.go`.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Rules quarantine suspicious synthetic/manipulated IOCs correctly.
+  - Done criteria: Ordered detector rules now include single-source fresh domain, suspicious timestamp/evidence checks, and TTP banner mismatch handling with deterministic tests.
 - [ ] Implement scoring engine in `internal/scoring/scorer.go`.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Composite score, threat level, and days-to-attack are generated.
+  - Done criteria: Scoring now applies poison/detection penalties, expanded port heuristics, clamping, stage-safe handling, and deterministic unit tests.
 - [ ] Add test vectors for low/medium/high/critical scoring outcomes.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Deterministic score tests pass with expected outputs.
+  - Done criteria: Scorer tests now assert quarantine behavior, threshold mapping, penalties, and port bonus math.
 
 ## 2) Go API and Worker Services
 
 ### 2.1 API routes and handlers
-- [ ] Implement router setup in `internal/api/router.go`.
-  - Status: Todo
+- [x] Implement router setup in `internal/api/router.go`.
+  - Status: Done
   - Owner: 
-  - Done criteria: Versioned routes under `/api/v1` are active.
-- [ ] Implement event endpoints in `internal/api/handlers_events.go`.
-  - Status: Todo
+  - Done criteria: Versioned routes under `/api/v1` are active for events, metrics, exports, and manual injection trigger.
+- [x] Implement event endpoints in `internal/api/handlers_events.go`.
+  - Status: Done
   - Owner: 
   - Done criteria: Can fetch scored, quarantined, and recent events.
-- [ ] Implement metrics endpoints in `internal/api/handlers_metrics.go`.
-  - Status: Todo
+- [x] Implement metrics endpoints in `internal/api/handlers_metrics.go`.
+  - Status: Done
   - Owner: 
   - Done criteria: Pipeline integrity and run stats returned in JSON.
-- [ ] Implement export endpoints in `internal/api/handlers_exports.go`.
-  - Status: Todo
+- [x] Implement export endpoints in `internal/api/handlers_exports.go`.
+  - Status: Done
   - Owner: 
   - Done criteria: STIX/PDF generation can be triggered via API.
 
 ### 2.2 Worker pipeline
 - [ ] Implement worker loop in `cmd/worker/main.go`.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Worker consumes events, validates, scores, and persists updates.
+  - Done criteria: Worker now loops over validated records, applies scoring in parallel workers, persists updates, and runs on an interval.
 - [ ] Add concurrency control and graceful shutdown handling.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: SIGINT/SIGTERM stops processing cleanly.
+  - Done criteria: Worker uses configurable concurrency and exits cleanly on SIGINT/SIGTERM.
 
 ## 3) Output and Reporting
 
 ### 3.1 STIX export
-- [ ] Implement STIX bundle generation in `internal/output/stix_exporter.go`.
-  - Status: Todo
+- [x] Implement STIX bundle generation in `internal/output/stix_exporter.go`.
+  - Status: Done
   - Owner: 
   - Done criteria: Valid STIX 2.1 JSON generated with timestamped filenames.
 - [ ] Validate output in MISP/STIX validator.
@@ -124,9 +124,9 @@
 
 ### 3.2 PDF report
 - [ ] Implement report generation in `internal/output/report_exporter.go`.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: PDF includes executive summary, top threats, quarantine log.
+  - Done criteria: Report exporter exists and writes artifacts, but current output is text-style placeholder and not a finalized formatted PDF.
 - [ ] Add reusable report templates and consistent styling.
   - Status: Todo
   - Owner: 
@@ -214,9 +214,9 @@
   - Owner: 
   - Done criteria: Demo can trigger and observe quarantine in real time.
 - [ ] Add STIX/PDF export actions from dashboard.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Buttons call Go API and show artifact path/status.
+  - Done criteria: Dashboard includes export buttons that call Go API and display artifact path/status feedback.
 
 ## 6) QA, Testing, and Reliability
 - [ ] Add integration tests for full flow: collect -> ingest -> validate -> score -> export.
@@ -224,9 +224,9 @@
   - Owner: 
   - Done criteria: Go provider tests and basic package tests pass; full collector->worker->export E2E remains pending.
 - [ ] Add contract tests between Go API and Python agent service.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Schema mismatches detected before release.
+  - Done criteria: Contract suite implemented and executed via temporary Go API fixture (`agents/tests/conftest.py`) in local CI profile.
 - [ ] Add fault-injection tests (timeouts, 429s, malformed source payloads).
   - Status: Todo
   - Owner: 
@@ -238,31 +238,31 @@
   - Owner: 
   - Done criteria: Starts API, worker, collector, and instructions for agents/dashboard.
 - [ ] Implement realistic seeding in `scripts/seed_demo_data.sh`.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Demo dataset can be generated quickly for rehearsal.
+  - Done criteria: Seed script now posts realistic IOC injections to Go API for fast demo dataset prep.
 - [ ] Add CI pipeline (Go tests, Python tests, lint, build checks).
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: PRs require green checks before merge.
+  - Done criteria: Local CI-equivalent profile implemented (`scripts/ci_check.sh`) and exposed via `make/just ci-check`; hosted PR pipeline YAML still pending.
 - [ ] Update `.gitignore` for Python venv, cache, and artifact folders.
   - Status: Todo
   - Owner: 
   - Done criteria: No local artifacts accidentally committed.
 
 ## 8) Documentation and Handover
-- [ ] Expand API docs in `docs/api.md` with endpoint request/response examples.
-  - Status: Todo
+- [x] Expand API docs in `docs/api.md` with endpoint request/response examples.
+  - Status: Done
   - Owner: 
-  - Done criteria: Team can integrate from docs alone.
-- [ ] Expand architecture doc in `docs/architecture.md` with data flow diagram.
-  - Status: Todo
+  - Done criteria: API routes and payload expectations are documented for Go API and Agents API.
+- [x] Expand architecture doc in `docs/architecture.md` with data flow diagram.
+  - Status: Done
   - Owner: 
-  - Done criteria: New team member can understand the stack in under 15 minutes.
-- [ ] Update `README.md` with setup, run commands, and troubleshooting.
-  - Status: Todo
+  - Done criteria: Architecture flow, subsystem boundaries, and implementation-state caveats are documented.
+- [x] Update `README.md` with setup, run commands, and troubleshooting.
+  - Status: Done
   - Owner: 
-  - Done criteria: Fresh clone can run project by following README only.
+  - Done criteria: README includes quick start, configuration, endpoints, caveats, and troubleshooting paths.
 
 ## 9) Demo and Submission Readiness
 - [ ] Finalize demo script and speaking flow.
@@ -270,19 +270,19 @@
   - Owner: 
   - Done criteria: 10-minute demo fits time and includes live poisoning catch moment.
 - [ ] Prepare backup offline demo data in case of API rate-limit/network issues.
-  - Status: Todo
+  - Status: Done
   - Owner: 
-  - Done criteria: Demo still works without live internet.
+  - Done criteria: Offline snapshot dataset and loader flow implemented (`data/offline/demo_snapshot.json`, `scripts/load_offline_snapshot.sh`).
 - [ ] Produce final artifacts bundle: STIX sample, PDF sample, screenshots, 2-minute video.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: All submission deliverables complete and reviewed.
+  - Done criteria: One-command bundle generator implemented (`scripts/create_artifact_bundle.sh`); final screenshots/video population pending.
 
 ## Critical path (must finish first)
 - [ ] Providers stable and normalized output
 - [ ] Ingestion + dedup + storage fully functional
 - [ ] Validation + scoring fully functional
-- [ ] API endpoints for events/metrics working
+- [x] API endpoints for events/metrics working
 - [x] Dashboard wired to API
 - [x] Red injection and quarantine visible in live demo
 

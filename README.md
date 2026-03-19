@@ -110,6 +110,8 @@ Type `just` to see the full just command list.
 
 ## Quick start
 
+Operational reference: `docs/RUNNING_GUIDE.md`
+
 ### 1) Full bootstrap (recommended)
 
 ```bash
@@ -169,6 +171,42 @@ make run-dashboard
 ```
 
 you can also use `just` instead of `make` at any point.
+
+### 2.1) Optional demo prep and rehearsal
+
+```bash
+./scripts/seed_demo_data.sh
+./scripts/rehearse_demo.sh
+```
+
+These scripts seed realistic demo IOC records and run a smoke rehearsal path (health checks, seed, mirror trigger, exports).
+
+### 2.2) Reliability command profile
+
+```bash
+make ci-check
+# or
+just ci-check
+```
+
+This runs the CI-equivalent local quality profile: Go tests, Python tests, compile checks, and shell script syntax checks.
+
+### 2.3) Offline fallback and bundle generation
+
+```bash
+./scripts/load_offline_snapshot.sh
+./scripts/create_artifact_bundle.sh
+```
+
+Or use task runners:
+
+```bash
+make offline-load
+make bundle
+# or
+just offline-load
+just bundle
+```
 
 ### 3) Health checks
 
@@ -338,6 +376,21 @@ just check
 - `cmd/worker/main.go` is currently a scaffold service.
 - `scripts/seed_demo_data.sh` is currently a scaffold.
 
+## Change audit snapshot (teammate contributions)
+
+Snapshot scope: reflects repository state and commits inspected on 2026-03-19 (recent `main` history), and should be refreshed after major merges.
+
+Detailed audit report: `docs/CHANGE_AUDIT_2026-03-19.md`
+Next sprint execution plan: `docs/NEXT_SPRINT_PLAN_2026-03-19.md`
+
+Recent repository history shows major implementation contributions in both Go and Python tracks:
+
+- Go core expansion: collector orchestration, API router/handlers, SQLite repository interface, STIX/report exporters, baseline scoring/validation.
+- Python expansion: adversarial mirror subsystem (`agents/app/adversarial/*`) plus mirror API wiring and dashboard integration.
+- Tooling/docs updates: `Makefile`, `justfile`, bootstrap script, and tasklist/status updates.
+
+For current truth state, treat `TEAM_TASK_LIST.md`, `docs/architecture.md`, and `docs/api.md` as synchronized references.
+
 ## Troubleshooting
 
 ### Go API fails to start with database issues
@@ -361,6 +414,15 @@ Verify both dependencies are up:
 
 - Go API reachable at `http://localhost:8080/health`
 - Agents service reachable at `http://localhost:8001/health`
+
+### Dashboard auto-refresh or presentation mode needs emergency disable
+
+Use environment kill switches before starting Streamlit:
+
+```bash
+export DISABLE_AUTO_REFRESH=true
+export DISABLE_PRESENTATION_MODE=true
+```
 
 ### `make` command does not see `.env`
 

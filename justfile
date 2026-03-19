@@ -69,6 +69,9 @@ test-py: agents-install test-py-install
 
 test: test-go test-py
 
+ci-check:
+  ./scripts/ci_check.sh
+
 fmt:
   go fmt ./...
 
@@ -88,6 +91,15 @@ check: check-go test-py
 
 seed:
   ./scripts/seed_demo_data.sh
+
+demo-rehearse:
+  ./scripts/rehearse_demo.sh
+
+offline-load:
+  ./scripts/load_offline_snapshot.sh
+
+bundle:
+  ./scripts/create_artifact_bundle.sh
 
 clean:
   go clean -cache -testcache
