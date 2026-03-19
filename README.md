@@ -168,7 +168,7 @@ or
 make run-dashboard
 ```
 
-you can also use just instead of make at any point.
+you can also use `just` instead of `make` at any point.
 
 ### 3) Health checks
 
