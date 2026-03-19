@@ -141,11 +141,21 @@ Terminal A (Go stack):
 ```bash
 ./scripts/run_local.sh
 ```
+or
+
+```bash
+make run-local
+```
 
 Terminal B (agents service):
 
 ```bash
 .venv/bin/uvicorn app.main:app --reload --port 8001 --app-dir agents
+```
+or
+
+```bash
+make run-agents
 ```
 
 Terminal C (dashboard):
@@ -153,6 +163,12 @@ Terminal C (dashboard):
 ```bash
 .venv/bin/streamlit run dashboards/streamlit_app.py
 ```
+or
+```bash
+make run-dashboard
+```
+
+you can also use just instead of make at any point.
 
 ### 3) Health checks
 
@@ -349,12 +365,6 @@ Verify both dependencies are up:
 ### `make` command does not see `.env`
 
 Use `just` (auto dotenv) or export variables in your shell before `make`.
-
-## Contribution guidance
-
-- Keep changes aligned with existing package layout and naming conventions.
-- Run `make check` (or `just check`) before opening PRs.
-- Prefer adding tests alongside functional changes.
 
 ## License
 
