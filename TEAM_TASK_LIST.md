@@ -124,9 +124,9 @@
 
 ### 3.2 PDF report
 - [ ] Implement report generation in `internal/output/report_exporter.go`.
-  - Status: In Progress
+  - Status: Done
   - Owner: 
-  - Done criteria: Report exporter exists and writes artifacts, but current output is text-style placeholder and not a finalized formatted PDF.
+  - Done criteria: Exporter now writes a valid PDF document structure and is covered by `internal/output/report_exporter_test.go`.
 - [ ] Add reusable report templates and consistent styling.
   - Status: Todo
   - Owner: 
@@ -266,9 +266,9 @@
 
 ## 9) Demo and Submission Readiness
 - [ ] Finalize demo script and speaking flow.
-  - Status: Todo
+  - Status: In Progress
   - Owner: 
-  - Done criteria: 10-minute demo fits time and includes live poisoning catch moment.
+  - Done criteria: Demo scripts now cover seed + full agent workflow smoke + rehearsal; final speaking script timing still pending.
 - [ ] Prepare backup offline demo data in case of API rate-limit/network issues.
   - Status: Done
   - Owner: 

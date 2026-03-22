@@ -141,7 +141,7 @@ The current runtime storage implementation is SQLite-backed.
 Terminal A (Go stack):
 
 ```bash
-./scripts/run_local.sh
+./scripts/run_local.sh start
 ```
 or
 
@@ -172,14 +172,30 @@ make run-dashboard
 
 you can also use `just` instead of `make` at any point.
 
+Service orchestration helpers:
+
+```bash
+./scripts/run_local.sh status
+./scripts/run_local.sh logs
+./scripts/run_local.sh stop
+./scripts/run_local.sh restart
+```
+
+Equivalent Make/Just targets:
+- `make status-local` / `just status-local`
+- `make logs-local` / `just logs-local`
+- `make stop-local` / `just stop-local`
+- `make restart-local` / `just restart-local`
+
 ### 2.1) Optional demo prep and rehearsal
 
 ```bash
 ./scripts/seed_demo_data.sh
+./scripts/agent_smoke.sh
 ./scripts/rehearse_demo.sh
 ```
 
-These scripts seed realistic demo IOC records and run a smoke rehearsal path (health checks, seed, mirror trigger, exports).
+These scripts seed realistic demo IOC records, validate agent workflow paths (blue, red, run, mirror ingest), and run a smoke rehearsal path (health checks, seed, mirror trigger, exports).
 
 ### 2.2) Reliability command profile
 

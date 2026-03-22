@@ -6,12 +6,12 @@ PIP := $(PYTHON) -m pip
 
 .PHONY: default help \
 	setup venv agents-install dashboard-install test-py-install \
-	run-api run-worker run-collector run-local \
+	run-api run-worker run-collector run-local stop-local status-local logs-local restart-local \
 	build-api build-worker build-collector build \
 	run-agents run-dashboard \
 	test-go test-py test \
 	fmt vet tidy lint check-go check ci-check \
-	seed demo-rehearse offline-load bundle clean bootstrap
+	seed agent-smoke demo-rehearse offline-load bundle clean bootstrap
 
 default: help
 
@@ -44,7 +44,19 @@ run-collector: ## Run Go collector service
 	go run ./cmd/collector
 
 run-local: ## Run local Go stack via helper script
-	./scripts/run_local.sh
+	./scripts/run_local.sh start
+
+stop-local: ## Stop all locally started services
+	./scripts/run_local.sh stop
+
+status-local: ## Show local services status
+	./scripts/run_local.sh status
+
+logs-local: ## Tail local services logs
+	./scripts/run_local.sh logs
+
+restart-local: ## Restart all local services
+	./scripts/run_local.sh restart
 
 build-api: ## Build Go API binary
 	mkdir -p bin
@@ -91,6 +103,9 @@ check: check-go test-py ## Run full repo checks (Go + Python tests)
 
 seed: ## Run demo seed helper script
 	./scripts/seed_demo_data.sh
+
+agent-smoke: ## Run agent workflow smoke checks
+	./scripts/agent_smoke.sh
 
 demo-rehearse: ## Run demo smoke rehearsal flow
 	./scripts/rehearse_demo.sh

@@ -23,5 +23,6 @@ bash -n scripts/seed_demo_data.sh
 bash -n scripts/rehearse_demo.sh
 bash -n scripts/load_offline_snapshot.sh
 bash -n scripts/create_artifact_bundle.sh
+bash -n scripts/agent_smoke.sh
 
 echo "[ci-check] done"

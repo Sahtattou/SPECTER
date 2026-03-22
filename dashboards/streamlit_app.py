@@ -54,6 +54,25 @@ def _detected_status(value: Any) -> str:
     return "CAUGHT" if value == 1 else ("MISSED" if value == 0 else "PENDING")
 
 
+def _origin_label(event: Dict[str, Any]) -> str:
+    return (
+        "Injected simulation" if bool(event.get("is_synthetic")) else "Real telemetry"
+    )
+
+
+def _verdict_label(event: Dict[str, Any]) -> str:
+    stage = str(event.get("pipeline_stage") or "")
+    poison_detected = event.get("poison_detected")
+    is_synthetic = bool(event.get("is_synthetic"))
+    if stage == "quarantined" and poison_detected is True:
+        return "Detected (Quarantined)"
+    if stage in {"validated", "scored"} and poison_detected is False:
+        return "Passed Validation"
+    if is_synthetic and poison_detected is False:
+        return "Missed Injection"
+    return "Needs Review"
+
+
 st.set_page_config(page_title="SPECTER", layout="wide")
 
 if "refresh_error_count" not in st.session_state:
@@ -99,6 +118,17 @@ st.markdown(
     .missed {color:#ff6d7a; font-weight:700;}
     .pending {color:#ffcf66; font-weight:700;}
     </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class='panel' style='margin-top:.75rem;'>
+      <strong>Adversarial mirror dynamics (same semantics as PDF)</strong><br/>
+      BLUE = Real telemetry ingestion · RED = Injected simulation challenge · DETECTOR = Verdict assignment.<br/>
+      Labels are text-first: <em>Real telemetry</em>, <em>Injected simulation</em>, <em>Detected (Quarantined)</em>, <em>Passed Validation</em>, <em>Missed Injection</em>, <em>Needs Review</em>.
+    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -196,6 +226,15 @@ with top_right:
         cols[3].metric("Injections", metrics.get("total_injections", 0))
         cols[4].metric("Caught", metrics.get("caught_injections", 0))
         cols[5].metric("Catch Rate %", metrics.get("catch_rate_percent", 0.0))
+
+        dyn = st.columns(4)
+        total_events = int(metrics.get("total_events", 0))
+        total_injections = int(metrics.get("total_injections", 0))
+        caught = int(metrics.get("caught_injections", 0))
+        dyn[0].metric("BLUE Real", max(total_events - total_injections, 0))
+        dyn[1].metric("RED Injected", total_injections)
+        dyn[2].metric("DETECTOR Caught", caught)
+        dyn[3].metric("DETECTOR Missed", max(total_injections - caught, 0))
         st.session_state["last_refresh_success_at"] = time.strftime(
             "%H:%M:%S UTC", time.gmtime()
         )
@@ -213,13 +252,19 @@ with left:
         events_payload = _get_json("/mirror/events?limit=50")
         events: List[Dict[str, Any]] = events_payload.get("events", [])
         if events:
+            for event in events:
+                event["origin"] = _origin_label(event)
+                event["detector_verdict"] = _verdict_label(event)
+
             df = pd.DataFrame(events)
             preferred = [
                 "collected_at",
+                "origin",
                 "ioc_type",
                 "raw_value",
                 "source_name",
                 "pipeline_stage",
+                "detector_verdict",
                 "corroboration_count",
                 "domain_age_days",
                 "poison_detected",
@@ -228,6 +273,70 @@ with left:
             ]
             visible_cols = [col for col in preferred if col in df.columns]
             st.dataframe(df[visible_cols], use_container_width=True, hide_index=True)
+
+            flow_cols = st.columns(3)
+            blue_df = df[df["origin"] == "Real telemetry"]
+            red_df = df[df["origin"] == "Injected simulation"]
+            verdict_counts = (
+                df["detector_verdict"]
+                .value_counts()
+                .rename_axis("verdict")
+                .reset_index(name="count")
+            )
+
+            with flow_cols[0]:
+                st.caption("BLUE Agent stream")
+                st.metric("Real telemetry records", int(len(blue_df)))
+            with flow_cols[1]:
+                st.caption("RED Agent stream")
+                st.metric("Injected simulation records", int(len(red_df)))
+            with flow_cols[2]:
+                st.caption("DETECTOR verdict states")
+                st.metric("Distinct verdict labels", int(len(verdict_counts)))
+
+            if not verdict_counts.empty:
+                st.caption("Detector verdict distribution")
+                st.bar_chart(verdict_counts.set_index("verdict"))
+
+            if not blue_df.empty:
+                st.caption("Top BLUE highlights (real telemetry)")
+                blue_cols = [
+                    c
+                    for c in [
+                        "collected_at",
+                        "raw_value",
+                        "pipeline_stage",
+                        "detector_verdict",
+                        "composite_score",
+                    ]
+                    if c in blue_df.columns
+                ]
+                blue_subset = pd.DataFrame(blue_df[blue_cols])
+                st.dataframe(
+                    blue_subset.head(8),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            if not red_df.empty:
+                st.caption("Top RED highlights (injected simulation)")
+                red_cols = [
+                    c
+                    for c in [
+                        "collected_at",
+                        "raw_value",
+                        "pipeline_stage",
+                        "detector_verdict",
+                        "detection_rule",
+                        "composite_score",
+                    ]
+                    if c in red_df.columns
+                ]
+                red_subset = pd.DataFrame(red_df[red_cols])
+                st.dataframe(
+                    red_subset.head(8), use_container_width=True, hide_index=True
+                )
+
             stage_counts = (
                 df["pipeline_stage"]
                 .value_counts()
@@ -267,6 +376,7 @@ with right:
                     <div class='panel' style='margin-bottom:.55rem;'>
                       <div><strong>{item.get("attack_type")}</strong> · {item.get("raw_value")}</div>
                       <div style='font-size:.86rem; color:#9bb2d7;'>{item.get("injected_at")}</div>
+                      <div style='font-size:.8rem; color:#c5d7ee;'>Origin: Injected simulation (RED)</div>
                       <div class='{status_class}'>{status}</div>
                     </div>
                     """,

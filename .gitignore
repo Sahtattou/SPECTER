@@ -1,2 +1,26 @@
 .env
 *.pyc
+
+# Python virtualenv and caches
+.venv/
+__pycache__/
+.pytest_cache/
+
+# SQLite and runtime databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local process/runtime state
+logs/
+run/
+*.pid
+
+# Build outputs and generated artifacts
+bin/
+artifacts/
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/

@@ -8,6 +8,9 @@ echo "[rehearse] checking service health"
 curl -sS "${GO_API_BASE_URL}/health" >/dev/null
 curl -sS "${AGENT_API_BASE_URL}/health" >/dev/null
 
+echo "[rehearse] running agent workflow smoke checks"
+"$(dirname "$0")/agent_smoke.sh" >/dev/null
+
 echo "[rehearse] seeding realistic demo data"
 "$(dirname "$0")/seed_demo_data.sh" >/dev/null
 

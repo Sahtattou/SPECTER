@@ -8,33 +8,76 @@ BUNDLE_DIR="${BUNDLE_ROOT}/${STAMP}"
 
 mkdir -p "${BUNDLE_DIR}/stix" "${BUNDLE_DIR}/reports" "${BUNDLE_DIR}/screenshots" "${BUNDLE_DIR}/video"
 
+parse_artifact_path() {
+  local json_payload="$1"
+  local label="$2"
+  local parsed
+  parsed="$(python3 - <<'PY' "$json_payload"
+import json
+import sys
+
+payload = sys.argv[1]
+try:
+    data = json.loads(payload)
+except json.JSONDecodeError as exc:
+    print(f"JSON_ERROR::{exc}")
+    raise SystemExit(1)
+
+if not isinstance(data, dict):
+    print("JSON_ERROR::response_not_object")
+    raise SystemExit(1)
+
+print(data.get("artifact_path", ""))
+PY
+  )" || {
+    echo "[bundle] ERROR: ${label} response was not valid JSON."
+    echo "[bundle] raw response: ${json_payload}"
+    exit 1
+  }
+  printf '%s' "$parsed"
+}
+
+call_export() {
+  local endpoint="$1"
+  local label="$2"
+  local body_file
+  body_file="$(mktemp)"
+
+  local http_code
+  http_code="$(curl -sS -o "$body_file" -w '%{http_code}' -X POST "${GO_API_BASE_URL}${endpoint}")"
+  local body
+  body="$(cat "$body_file")"
+  rm -f "$body_file"
+
+  if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
+    echo "[bundle] ERROR: ${label} export failed (HTTP ${http_code})."
+    echo "[bundle] response body: ${body}"
+    exit 1
+  fi
+
+  printf '%s' "$body"
+}
+
 echo "[bundle] generating exports via Go API"
-stix_json="$(curl -sS -X POST "${GO_API_BASE_URL}/api/v1/exports/stix")"
-report_json="$(curl -sS -X POST "${GO_API_BASE_URL}/api/v1/exports/report")"
+stix_json="$(call_export "/api/v1/exports/stix" "STIX")"
+report_json="$(call_export "/api/v1/exports/report" "Report")"
 
 echo "$stix_json" > "${BUNDLE_DIR}/stix_export_response.json"
 echo "$report_json" > "${BUNDLE_DIR}/report_export_response.json"
 
-stix_path="$(python3 - <<'PY'
-import json,sys
-data=json.loads(sys.stdin.read())
-print(data.get('artifact_path',''))
-PY
-<<< "$stix_json")"
-
-report_path="$(python3 - <<'PY'
-import json,sys
-data=json.loads(sys.stdin.read())
-print(data.get('artifact_path',''))
-PY
-<<< "$report_json")"
+stix_path="$(parse_artifact_path "$stix_json" "STIX")"
+report_path="$(parse_artifact_path "$report_json" "Report")"
 
 if [ -n "$stix_path" ] && [ -f "$stix_path" ]; then
   cp "$stix_path" "${BUNDLE_DIR}/stix/"
+else
+  echo "[bundle] warning: STIX artifact path missing or file not found (${stix_path:-none})"
 fi
 
 if [ -n "$report_path" ] && [ -f "$report_path" ]; then
   cp "$report_path" "${BUNDLE_DIR}/reports/"
+else
+  echo "[bundle] warning: Report artifact path missing or file not found (${report_path:-none})"
 fi
 
 cat > "${BUNDLE_DIR}/CHECKLIST.md" <<'EOF'

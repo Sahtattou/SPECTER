@@ -7,7 +7,16 @@ This guide is the operational reference for local runs, demo rehearsal, offline 
 ### Go stack
 
 ```bash
-./scripts/run_local.sh
+./scripts/run_local.sh start
+```
+
+Management commands:
+
+```bash
+./scripts/run_local.sh status
+./scripts/run_local.sh logs
+./scripts/run_local.sh stop
+./scripts/run_local.sh restart
 ```
 
 ### Agents service
@@ -44,11 +53,26 @@ Includes:
 ./scripts/seed_demo_data.sh
 ```
 
+### Validate agent workflow scripts (not injection-only)
+
+```bash
+./scripts/agent_smoke.sh
+```
+
+This smoke script validates:
+- `/mirror/ingest` (non-injection ingest path)
+- `/agents/blue/analyze`
+- `/agents/red/inject` (dry and live)
+- `/agents/run` for both `blue_analyst` and `red_injector`
+- `/mirror/metrics`
+
 ### Run demo rehearsal smoke flow
 
 ```bash
 ./scripts/rehearse_demo.sh
 ```
+
+`rehearse_demo.sh` now includes `agent_smoke.sh`, so rehearsal verifies full agent workflow coverage in addition to injection and export paths.
 
 ## 4) Offline fallback mode
 
