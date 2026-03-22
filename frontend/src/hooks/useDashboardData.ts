@@ -1,0 +1,115 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+import {
+  exportReport,
+  exportStix,
+  getConfiguredApiBases,
+  getGoPipelineMetrics,
+  getMirrorEvents,
+  getMirrorInjections,
+  getMirrorMetrics,
+  triggerInjection,
+} from '../api/client'
+import type {
+  GoPipelineMetrics,
+  MirrorEvent,
+  MirrorMetrics,
+  InjectionActivity,
+} from '../types/api'
+
+const DEFAULT_REFRESH_SECONDS = 10
+
+export interface DashboardDataState {
+  mirrorMetrics: MirrorMetrics | null
+  goMetrics: GoPipelineMetrics | null
+  events: MirrorEvent[]
+  injections: InjectionActivity[]
+  loading: boolean
+  error: string | null
+  refresh: () => Promise<void>
+  triggerManualInjection: (attackType: string | null) => Promise<string>
+  runStixExport: () => Promise<string>
+  runReportExport: () => Promise<string>
+  apiBases: { agentApiBase: string; goApiBase: string }
+}
+
+export function useDashboardData(autoRefreshSeconds = DEFAULT_REFRESH_SECONDS): DashboardDataState {
+  const [mirrorMetrics, setMirrorMetrics] = useState<MirrorMetrics | null>(null)
+  const [goMetrics, setGoMetrics] = useState<GoPipelineMetrics | null>(null)
+  const [events, setEvents] = useState<MirrorEvent[]>([])
+  const [injections, setInjections] = useState<InjectionActivity[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [mirror, go, eventsRes, injectionsRes] = await Promise.all([
+        getMirrorMetrics(),
+        getGoPipelineMetrics(),
+        getMirrorEvents(50),
+        getMirrorInjections(50),
+      ])
+      setMirrorMetrics(mirror)
+      setGoMetrics(go)
+      setEvents(eventsRes.events)
+      setInjections(injectionsRes.injections)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load dashboard data.'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const triggerManualInjection = useCallback(async (attackType: string | null) => {
+    const response = await triggerInjection(attackType)
+    await refresh()
+    return `Injected ${response.attack_type} · ${response.raw_value}`
+  }, [refresh])
+
+  const runStixExport = useCallback(async () => {
+    const response = await exportStix()
+    await refresh()
+    return response.artifact_path
+  }, [refresh])
+
+  const runReportExport = useCallback(async () => {
+    const response = await exportReport()
+    await refresh()
+    return response.artifact_path
+  }, [refresh])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    if (autoRefreshSeconds <= 0) {
+      return undefined
+    }
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, autoRefreshSeconds * 1000)
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [autoRefreshSeconds, refresh])
+
+  const apiBases = useMemo(() => getConfiguredApiBases(), [])
+
+  return {
+    mirrorMetrics,
+    goMetrics,
+    events,
+    injections,
+    loading,
+    error,
+    refresh,
+    triggerManualInjection,
+    runStixExport,
+    runReportExport,
+    apiBases,
+  }
+}

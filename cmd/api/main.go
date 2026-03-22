@@ -22,7 +22,7 @@ func main() {
 		}
 	}()
 
-	server := &api.Server{Repo: repo}
+	server := &api.Server{Repo: repo, AllowedOrigins: cfg.APIAllowedOrigins}
 
 	log.Printf("api listening on :%s", cfg.APIPort)
 	if err := http.ListenAndServe(":"+cfg.APIPort, server.Router()); err != nil {

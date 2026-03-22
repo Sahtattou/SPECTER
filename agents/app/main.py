@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.adversarial import AdversarialMirrorService
 from app.chains.blue_analyst_chain import run_blue_analyst_chain
@@ -20,6 +21,13 @@ from app.schemas import (
 from app.services.agent_runner import run_agent
 
 app = FastAPI(title="SPECTER Agent Service", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().agent_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 @lru_cache(maxsize=1)

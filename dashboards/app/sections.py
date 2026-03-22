@@ -96,9 +96,7 @@ def render_control_strip(config: DashboardConfig, controls: SidebarControls) -> 
 
 def _render_pipeline_metrics(config: DashboardConfig) -> None:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown(
-        "<p class='panel-title'>Pipeline Telemetry Metrics</p>", unsafe_allow_html=True
-    )
+    st.markdown("<p class='panel-title'>Pipeline Overview</p>", unsafe_allow_html=True)
     mirror_metrics: dict[str, Any] = {}
     go_metrics: dict[str, Any] = {}
     metrics_errors: list[str] = []
@@ -119,83 +117,53 @@ def _render_pipeline_metrics(config: DashboardConfig) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    cols = st.columns(6)
-    cols[0].metric("Total Events (Go)", go_metrics.get("total_events", 0))
-    cols[1].metric("Scored (Go)", go_metrics.get("scored_count", 0))
-    cols[2].metric("Quarantined (Go)", go_metrics.get("quarantined_count", 0))
-    cols[3].metric("Injections (Mirror)", mirror_metrics.get("total_injections", 0))
-    cols[4].metric("Caught (Mirror)", mirror_metrics.get("caught_injections", 0))
-    cols[5].metric("Catch Rate %", mirror_metrics.get("catch_rate_percent", 0.0))
+    row1 = st.columns(4)
+    row1[0].metric("Total Events", go_metrics.get("total_events", 0))
+    row1[1].metric("Injections", mirror_metrics.get("total_injections", 0))
+    row1[2].metric("Caught", mirror_metrics.get("caught_injections", 0))
+    row1[3].metric(
+        "Catch Rate",
+        f"{mirror_metrics.get('catch_rate_percent', 0.0):.1f}%",
+    )
 
-    dyn = st.columns(4)
-    total_events_go = int(go_metrics.get("total_events", 0))
     total_events_mirror = int(mirror_metrics.get("total_events", 0))
     total_injections = int(mirror_metrics.get("total_injections", 0))
     caught = int(mirror_metrics.get("caught_injections", 0))
+    missed = max(total_injections - caught, 0)
     real_events = int(
         mirror_metrics.get(
             "real_events", max(total_events_mirror - total_injections, 0)
         )
     )
-    dyn[0].metric("BLUE Real (Mirror)", real_events)
-    dyn[1].metric("RED Injected (Mirror)", total_injections)
-    dyn[2].metric("DETECTOR Caught (Mirror)", caught)
-    dyn[3].metric("DETECTOR Missed (Mirror)", max(total_injections - caught, 0))
-    st.caption(
-        f"Source split: Go pipeline totals={total_events_go}, Mirror totals={total_events_mirror}."
-    )
 
-    balance = st.columns(4)
-    balance[0].metric("Red/Blue Ratio", mirror_metrics.get("red_blue_ratio", 0.0))
-    balance[1].metric("Ratio Limit", mirror_metrics.get("red_max_ratio", 1.0))
-    balance[2].metric(
-        "Min Real Before Auto-Red",
-        mirror_metrics.get("min_real_events_before_auto_red", 0),
-    )
+    row2 = st.columns(4)
+    row2[0].metric("Real (BLUE)", real_events)
+    row2[1].metric("Injected (RED)", total_injections)
+    row2[2].metric("Missed", missed)
+    ratio = mirror_metrics.get("red_blue_ratio", 0.0)
     gate_allowed = mirror_metrics.get("auto_red_last_allowed")
-    gate_label = (
-        "ALLOWED"
+    gate = (
+        "OK"
         if gate_allowed is True
-        else ("THROTTLED" if gate_allowed is False else "UNKNOWN")
+        else ("THROTTLED" if gate_allowed is False else "—")
     )
-    balance[3].metric("Auto-Red Gate", gate_label)
-    st.caption(
-        f"Auto-red reason: {mirror_metrics.get('auto_red_last_reason', 'n/a')} · Last evaluated ratio: {mirror_metrics.get('auto_red_last_ratio', 0.0)}"
-    )
+    row2[3].metric("Red/Blue", f"{ratio:.2f} / {gate}")
 
     freshness_age = go_metrics.get("freshness_age_seconds")
-    freshness_cols = st.columns(3)
-    freshness_cols[0].metric(
-        "Go Freshness Age (s)",
-        freshness_age if freshness_age is not None else "n/a",
+    freshness_display = (
+        f"{int(freshness_age)}s"
+        if isinstance(freshness_age, (int, float)) and freshness_age is not None
+        else "n/a"
     )
-    freshness_cols[1].metric(
-        "Go Distinct Sources", go_metrics.get("distinct_sources", 0)
+    row3 = st.columns(3)
+    row3[0].metric(
+        "Last Collected",
+        go_metrics.get("last_collected_at", "—")[:19]
+        if go_metrics.get("last_collected_at")
+        else "—",
     )
-    freshness_cols[2].metric("Mirror Queue Size", mirror_metrics.get("queue_size", 0))
-
-    st.caption(
-        "Go metrics: "
-        f"last_updated={go_metrics.get('last_updated_at', 'n/a')} · "
-        f"last_collected={go_metrics.get('last_collected_at', 'n/a')}"
-    )
-    st.caption(
-        "Mirror metrics tick: "
-        f"{mirror_metrics.get('metrics_generated_at', 'n/a')} · "
-        f"last_event_updated={mirror_metrics.get('last_event_updated_at', 'n/a')}"
-    )
-
-    source_freshness = go_metrics.get("source_freshness_age_seconds")
-    if isinstance(source_freshness, dict) and source_freshness:
-        source_df = pd.DataFrame(
-            [
-                {"source": source, "age_seconds": age}
-                for source, age in source_freshness.items()
-            ]
-        )
-        source_df = source_df.sort_values(by=["age_seconds", "source"])
-        st.caption("Go per-source freshness age (seconds)")
-        st.dataframe(source_df, use_container_width=True, hide_index=True)
+    row3[1].metric("Freshness Age", freshness_display)
+    row3[2].metric("Sources", go_metrics.get("distinct_sources", 0))
 
     if metrics_errors:
         bump_refresh_errors()
@@ -238,19 +206,12 @@ def _render_ioc_feed(config: DashboardConfig) -> None:
             "origin",
             "ioc_type",
             "raw_value",
-            "source_name",
-            "pipeline_stage",
             "detector_verdict",
-            "corroboration_count",
-            "domain_age_days",
-            "poison_detected",
-            "detection_rule",
             "composite_score",
         ]
         visible_cols = [col for col in preferred if col in df.columns]
         st.dataframe(df[visible_cols], use_container_width=True, hide_index=True)
 
-        flow_cols = st.columns(3)
         blue_df = df[df["origin"] == "Real telemetry"]
         red_df = df[df["origin"] == "Injected simulation"]
         verdict_counts = (
@@ -260,64 +221,13 @@ def _render_ioc_feed(config: DashboardConfig) -> None:
             .reset_index(name="count")
         )
 
-        with flow_cols[0]:
-            st.caption("BLUE Agent stream")
-            st.metric("Real telemetry records", int(len(blue_df)))
-        with flow_cols[1]:
-            st.caption("RED Agent stream")
-            st.metric("Injected simulation records", int(len(red_df)))
-        with flow_cols[2]:
-            st.caption("DETECTOR verdict states")
-            st.metric("Distinct verdict labels", int(len(verdict_counts)))
+        stream_cols = st.columns(3)
+        stream_cols[0].metric("Real (BLUE)", int(len(blue_df)))
+        stream_cols[1].metric("Injected (RED)", int(len(red_df)))
+        stream_cols[2].metric("Verdicts", int(len(verdict_counts)))
 
         if not verdict_counts.empty:
-            st.caption("Detector verdict distribution")
             st.bar_chart(verdict_counts.set_index("verdict"))
-
-        if not blue_df.empty:
-            st.caption("Top BLUE highlights (real telemetry)")
-            blue_cols = [
-                c
-                for c in [
-                    "collected_at",
-                    "raw_value",
-                    "pipeline_stage",
-                    "detector_verdict",
-                    "composite_score",
-                ]
-                if c in blue_df.columns
-            ]
-            blue_subset = pd.DataFrame(blue_df[blue_cols])
-            st.dataframe(blue_subset.head(8), use_container_width=True, hide_index=True)
-
-        if not red_df.empty:
-            st.caption("Top RED highlights (injected simulation)")
-            red_cols = [
-                c
-                for c in [
-                    "collected_at",
-                    "raw_value",
-                    "pipeline_stage",
-                    "detector_verdict",
-                    "detection_rule",
-                    "composite_score",
-                ]
-                if c in red_df.columns
-            ]
-            red_subset = pd.DataFrame(red_df[red_cols])
-            st.dataframe(red_subset.head(8), use_container_width=True, hide_index=True)
-
-        stage_counts = (
-            df["pipeline_stage"]
-            .value_counts()
-            .rename_axis("stage")
-            .reset_index(name="count")
-            if "pipeline_stage" in df.columns
-            else pd.DataFrame()
-        )
-        if not stage_counts.empty:
-            st.caption("Pipeline stage distribution")
-            st.bar_chart(stage_counts.set_index("stage"))
 
     except (requests.RequestException, ValueError) as exc:
         st.warning(f"Could not load events: {exc}")

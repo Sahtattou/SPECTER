@@ -15,9 +15,11 @@ require_cmd() {
 printf "==> Verifying required tooling...\n"
 require_cmd go
 require_cmd python3
+require_cmd npm
 
 printf "==> Go version: %s\n" "$(go version)"
 printf "==> Python version: %s\n" "$(python3 --version)"
+printf "==> Node version: %s\n" "$(node --version)"
 
 if [ ! -f .env ]; then
   printf "==> Creating .env from .env.example\n"
@@ -38,7 +40,10 @@ printf "==> Upgrading pip/setuptools/wheel\n"
 
 printf "==> Installing Python dependencies\n"
 .venv/bin/python -m pip install -r agents/requirements.txt
-.venv/bin/python -m pip install pytest streamlit requests
+.venv/bin/python -m pip install pytest requests
+
+printf "==> Installing frontend dependencies\n"
+npm install --prefix frontend
 
 printf "==> Downloading Go modules\n"
 go mod download
@@ -61,7 +66,7 @@ Next steps:
   1) Edit .env as needed (API keys, ports, DB settings)
   2) Start core Go services: ./scripts/run_local.sh
   3) Start agents API: .venv/bin/uvicorn app.main:app --reload --port 8001 --app-dir agents
-  4) Start dashboard: .venv/bin/streamlit run dashboards/streamlit_app.py
+  4) Start desktop dashboard: npm run tauri dev --prefix frontend
 
 Optional task runners:
   - just check

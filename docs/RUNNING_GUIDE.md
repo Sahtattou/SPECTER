@@ -42,10 +42,25 @@ Management commands:
 .venv/bin/uvicorn app.main:app --reload --port ${AGENTS_PORT:-8001} --app-dir agents
 ```
 
-### Dashboard
+### Desktop dashboard
 
 ```bash
-.venv/bin/streamlit run dashboards/streamlit_app.py
+npm run tauri dev --prefix frontend
+```
+
+Linux packaging (default project workflow):
+
+```bash
+make build-dashboard
+# or
+just build-dashboard
+```
+
+This builds `deb` and `rpm` bundles by default.
+If you need AppImage explicitly:
+
+```bash
+npm run tauri --prefix frontend -- build --bundles appimage
 ```
 
 ## 2) Reliability checks (local CI profile)
@@ -132,16 +147,21 @@ Output:
   - `video/`
   - `CHECKLIST.md`
 
-## 6) Dashboard reliability controls
+## 6) Desktop dashboard connectivity controls
 
-Environment kill switches:
+When running the React/Tauri desktop frontend, ensure CORS origins include your local UI origin:
 
 ```bash
-export DISABLE_AUTO_REFRESH=true
-export DISABLE_PRESENTATION_MODE=true
+export API_ALLOWED_ORIGINS=http://localhost:5173,tauri://localhost
+export AGENT_ALLOWED_ORIGINS=http://localhost:5173,tauri://localhost
 ```
 
-These disable auto-refresh and presentation mode toggles for emergency stabilization.
+Recommended local-safe allowlist (covers both `localhost` and `127.0.0.1` origins used by Vite/Tauri/dev tools):
+
+```bash
+export API_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:1420,http://127.0.0.1:1420,tauri://localhost
+export AGENT_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:1420,http://127.0.0.1:1420,tauri://localhost
+```
 
 ## 7) Red/Blue balance controls (important)
 
@@ -179,21 +199,25 @@ Manual red trigger endpoints still work regardless of auto-loop guardrails.
    - Cause: environment process conflict or temp Go API startup failure.
    - Fix: run `./scripts/run_local.sh status`, stop conflicting processes, rerun `make ci-check`.
 
-4. **Dashboard shows stale/empty data**
+4. **Desktop dashboard shows stale/empty data**
    - Cause: agents service unavailable or mirror database newly initialized.
    - Fix: verify `http://localhost:8001/health`, then run `./scripts/seed_demo_data.sh` and `./scripts/agent_smoke.sh`.
-   - Refresh note: dashboard auto-refresh defaults to a live interval now (10s). If manually set to `0`, ingestion panels will not update until manual rerun.
-   - Metrics note: `GET /mirror/metrics` now returns freshness signals (`metrics_generated_at`, `last_event_updated_at`, `freshness_age_seconds`, `source_freshness_age_seconds`) that the dashboard renders in Pipeline Metrics.
+   - Refresh note: desktop dashboard auto-refresh defaults to a live interval (10s).
+   - Metrics note: `GET /mirror/metrics` returns freshness signals (`metrics_generated_at`, `last_event_updated_at`, `freshness_age_seconds`, `source_freshness_age_seconds`) rendered in Pipeline Metrics.
    - Count accuracy note: pipeline totals (`Total`, `Scored`, `Quarantined`) are sourced from Go API `GET /api/v1/metrics/pipeline`; red/injection dynamics remain sourced from agents `GET /mirror/metrics`.
 
 5. **Local run command starts only partial services**
-   - Cause: missing `.venv/bin/uvicorn` or `.venv/bin/streamlit`.
+   - Cause: missing `.venv/bin/uvicorn` or `npm` frontend dependencies.
    - Fix: run `./scripts/bootstrap.sh` and restart with `./scripts/run_local.sh restart`.
 
-6. **Real telemetry appears stale or only example data shows up**
+6. **Dashboard log shows Node `read EIO` / unhandled readline error**
+   - Cause: frontend dev server started without detached non-interactive stdin in background orchestration.
+   - Fix: use `./scripts/run_local.sh start` (current launcher detaches dashboard with `setsid`/`nohup` and redirects stdin from `/dev/null`); then confirm `./scripts/run_local.sh status` and check `logs/dashboard.log`.
+
+7. **Real telemetry appears stale or only example data shows up**
    - Cause: collector targets are deterministic seeds or empty target lists; multiple orphan collectors can also overwrite visibility.
    - Fix: set explicit non-demo targets in `.env` (`SHODAN_TARGETS`, `ABUSEIPDB_TARGETS`, `OTX_TARGETS`, `URLHAUS_HOSTS`, `CRTSH_QUERY`), keep `DEMO_MODE=false`, and restart with `./scripts/run_local.sh restart`.
 
-7. **Looks like collector only pulled once after startup**
+8. **Looks like collector only pulled once after startup**
    - Cause: total-event counts can stay flat under upsert, even while rows are refreshed.
    - Fix: check freshness fields on `GET /api/v1/metrics/pipeline` (`last_updated_at`, `freshness_age_seconds`, `source_freshness_age_seconds`) to confirm ongoing pulls.

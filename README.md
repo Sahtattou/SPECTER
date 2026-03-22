@@ -24,7 +24,7 @@ Most student TI demos stop at data collection. SPECTER is built to show an end-t
 - SQLite-backed repository with schema initialization and indices (`internal/storage/repository.go`, `internal/storage/migrations/001_init.sql`)
 - Python FastAPI agent service with blue/red agent endpoints and adversarial mirror endpoints (`agents/app/main.py`)
 - Agent mirror red/blue balancing with auto-red guardrails + Go real-event sync (`agents/app/adversarial/service.py`)
-- Streamlit dashboard consuming agent-service mirror endpoints (`dashboards/streamlit_app.py`)
+- Tauri + React desktop dashboard consuming agent-service mirror endpoints (`frontend/`)
 - Task runners and bootstrap tooling (`justfile`, `Makefile`, `scripts/bootstrap.sh`)
 
 ## High-level architecture
@@ -51,7 +51,7 @@ Go REST API                        Python Agent Service
           +--------------+---------------+
                          |
                          v
-                   Streamlit Dashboard
+              Tauri + React Desktop Dashboard
 ```
 
 ## Repository layout
@@ -73,7 +73,7 @@ SPECTER/
 │   └── validation/     # Detection/quarantine rules
 ├── pkg/models/         # Shared domain models
 ├── agents/             # Python FastAPI agents service
-├── dashboards/         # Streamlit dashboard
+├── frontend/           # Tauri + React desktop dashboard
 ├── scripts/            # Bootstrap and local run helpers
 ├── justfile            # Developer task runner (dotenv-aware)
 ├── Makefile            # Build/test task runner (CI friendly)
@@ -84,6 +84,8 @@ SPECTER/
 
 - Go 1.24+
 - Python 3.11+
+- Node.js 18+
+- Rust toolchain (for Tauri desktop build)
 - Bash (Linux/macOS shell)
 
 Optional but recommended:
@@ -154,7 +156,7 @@ or
 make run-local
 ```
 
-This starts Go API + worker + collector + agents + dashboard with pid/log supervision.
+This starts Go API + worker + collector + agents + React dev dashboard with pid/log supervision.
 You can still run services individually (`make run-agents`, `make run-dashboard`) for debugging.
 
 Service orchestration helpers:
@@ -223,7 +225,8 @@ cp .env.example .env
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 .venv/bin/python -m pip install -r agents/requirements.txt
-.venv/bin/python -m pip install pytest streamlit requests
+.venv/bin/python -m pip install pytest requests
+npm install --prefix frontend
 go mod download
 ```
 
@@ -233,13 +236,14 @@ Environment loading behavior differs by entrypoint:
 
 - Go services load `.env` through `godotenv` in `internal/config/config.go`.
 - `just` auto-loads `.env` because `justfile` enables `dotenv-load`.
-- `make`, direct `uvicorn`, and direct `streamlit` commands do not auto-parse `.env`; they use exported shell variables and code defaults.
+- `make`, direct `uvicorn`, and direct `npm` commands do not auto-parse `.env`; they use exported shell variables and code defaults.
 
 ### Core runtime variables
 
 | Variable | Purpose | Default in code |
 |---|---|---|
 | `API_PORT` | Go API listen port | `8080` |
+| `API_ALLOWED_ORIGINS` | Allowed browser/webview origins for Go API CORS | empty |
 | `WORKER_CONCURRENCY` | Worker parallelism setting | `4` |
 | `COLLECTION_INTERVAL_SECONDS` | Collector tick interval | `60` |
 | `DB_DSN` | SQLite DSN | `file:specter.db?_busy_timeout=5000&_journal_mode=WAL` |
@@ -268,6 +272,7 @@ Collector note:
 | Variable | Purpose | Default |
 |---|---|---|
 | `GO_API_BASE_URL` | Go API base URL used by agents | `http://localhost:8080` |
+| `AGENT_ALLOWED_ORIGINS` | Allowed browser/webview origins for Agents API CORS | `http://localhost:1420,tauri://localhost` |
 | `AGENT_REQUEST_TIMEOUT_SECONDS` | HTTP timeout to Go API | `10` |
 | `AGENT_MAX_RETRIES` | Retries for agent HTTP calls | `2` |
 | `AGENT_MODEL` | Agent model label/config | `gpt-4.1-mini` |
@@ -279,11 +284,13 @@ Collector note:
 | `GO_SYNC_ON_STARTUP` | Run first Go sync immediately on service start | `false` |
 | `ADVERSARIAL_DB_PATH` | Adversarial mirror sqlite path | `./specter_adversarial.db` |
 
-### Dashboard variable
+### Desktop dashboard variables
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `AGENT_API_BASE_URL` | Agent API base URL used by dashboard requests | `http://localhost:8001` |
+| `VITE_AGENT_API_BASE_URL` | Agent API base URL used by React frontend | `http://127.0.0.1:8001` |
+| `VITE_GO_API_BASE_URL` | Go API base URL used by React frontend | `http://127.0.0.1:8080` |
 
 Note about `DB_DSN`:
 
@@ -349,7 +356,16 @@ just setup
 just run-local
 just run-agents
 just run-dashboard
+just build-dashboard
 just check
+```
+
+`build-dashboard` targets Linux `deb` and `rpm` bundles by default for reproducible packaging in environments where AppImage tooling may be unavailable.
+
+Optional AppImage build (Linux):
+
+```bash
+npm run tauri --prefix frontend -- build --bundles appimage
 ```
 
 ### Script-level shortcuts
@@ -424,20 +440,26 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r agents/requirements.txt
 ```
 
-### Dashboard cannot fetch data
+### Desktop dashboard cannot fetch data
 
 Verify both dependencies are up:
 
 - Go API reachable at `http://localhost:8080/health`
 - Agents service reachable at `http://localhost:8001/health`
 
-### Dashboard auto-refresh or presentation mode needs emergency disable
-
-Use environment kill switches before starting Streamlit:
+If APIs are healthy but frontend requests fail, verify `API_ALLOWED_ORIGINS` and `AGENT_ALLOWED_ORIGINS` include your dashboard origin(s):
 
 ```bash
-export DISABLE_AUTO_REFRESH=true
-export DISABLE_PRESENTATION_MODE=true
+API_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:1420,http://127.0.0.1:1420,tauri://localhost
+AGENT_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:1420,http://127.0.0.1:1420,tauri://localhost
+```
+
+### Desktop app launch
+
+Run the Tauri desktop app:
+
+```bash
+npm run tauri dev --prefix frontend
 ```
 
 ### Service startup reproducibility check

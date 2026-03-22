@@ -6,6 +6,15 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     go_api_base_url: str = Field(default="http://localhost:8080")
+    agent_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:1420",
+            "http://127.0.0.1:1420",
+            "tauri://localhost",
+        ]
+    )
     request_timeout_seconds: int = Field(default=10)
     max_retries: int = Field(default=2)
     agent_model: str = Field(default="gpt-4.1-mini")
@@ -19,8 +28,17 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
+        allowed_origins = [
+            origin.strip()
+            for origin in os.getenv(
+                "AGENT_ALLOWED_ORIGINS",
+                "http://localhost:5173,http://127.0.0.1:5173,http://localhost:1420,http://127.0.0.1:1420,tauri://localhost",
+            ).split(",")
+            if origin.strip()
+        ]
         return cls(
             go_api_base_url=os.getenv("GO_API_BASE_URL", "http://localhost:8080"),
+            agent_allowed_origins=allowed_origins,
             request_timeout_seconds=int(
                 os.getenv("AGENT_REQUEST_TIMEOUT_SECONDS", "10")
             ),

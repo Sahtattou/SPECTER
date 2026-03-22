@@ -1,0 +1,270 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.2rem 1.4rem;
+}
+
+.app-header {
+  border: 1px solid rgba(85, 206, 255, 0.4);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  background: linear-gradient(145deg, rgba(7, 23, 38, 0.92), rgba(6, 12, 20, 0.96));
+  box-shadow: 0 0 20px rgba(68, 208, 255, 0.13);
+}
+
+.signal-banner {
+  margin: 0 0 0.5rem;
+  color: #44d0ff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+}
+
+.subtitle {
+  margin-top: 0.4rem;
+  color: #99bbcb;
+}
+
+.endpoint-strip {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: #74a7bd;
+  font-size: 0.82rem;
+}
+
+.grid-top {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.grid-top > .controls-panel {
+  flex: 1;
+}
+
+.grid-top > .metrics-panel {
+  flex: 2;
+}
+
+.grid-bottom {
+  display: flex;
+  gap: 1rem;
+}
+
+.grid-bottom > .events-panel {
+  flex: 2;
+}
+
+.grid-bottom > .injections-panel {
+  flex: 1;
+}
+
+.panel {
+  border: 1px solid rgba(74, 179, 211, 0.35);
+  border-radius: 12px;
+  background: rgba(8, 20, 32, 0.83);
+  box-shadow: 0 0 16px rgba(68, 208, 255, 0.08);
+  padding: 0.9rem 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #58d8ff;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.control-group label {
+  font-size: 0.84rem;
+  color: #8cb8c9;
+}
+
+.control-group select {
+  height: 2.2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(93, 178, 206, 0.4);
+  background: rgba(5, 17, 29, 0.95);
+  color: #d8eff8;
+  padding: 0 0.65rem;
+}
+
+.control-actions {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.control-actions button {
+  height: 2.2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(84, 201, 245, 0.42);
+  background: linear-gradient(140deg, rgba(9, 28, 41, 0.94), rgba(7, 17, 31, 0.96));
+  color: #ddf4ff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.control-actions button:hover:not(:disabled) {
+  border-color: #57d8ff;
+  transform: translateY(-1px);
+}
+
+.control-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-status {
+  margin: 0.7rem 0 0;
+  color: #5fffb3;
+  font-size: 0.84rem;
+}
+
+.action-error,
+.error-banner {
+  color: #ff6f81;
+  font-size: 0.84rem;
+}
+
+.metric-grid {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.metric-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-card {
+  border: 1px solid rgba(85, 162, 196, 0.3);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(5, 15, 25, 0.72);
+  text-align: left;
+}
+
+.metric-label {
+  display: block;
+  color: #86b4c8;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-value {
+  color: #e8f7ff;
+  font-size: 1.08rem;
+  margin-top: 0.2rem;
+  display: inline-block;
+}
+
+.table-scroll {
+  margin-top: 0.75rem;
+  overflow: auto;
+  max-height: 420px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(84, 157, 190, 0.2);
+}
+
+th {
+  color: #79bdd6;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.injection-list {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.injection-item {
+  border: 1px solid rgba(76, 150, 181, 0.31);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: rgba(7, 17, 27, 0.7);
+}
+
+.injection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.status {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.status-caught {
+  color: #5fffb3;
+}
+
+.status-missed {
+  color: #ff7986;
+}
+
+.status-pending {
+  color: #ffcf62;
+}
+
+.muted {
+  color: #8aaebf;
+  font-size: 0.76rem;
+}
+
+.empty-state {
+  margin-top: 0.8rem;
+  color: #96b4c2;
+  text-align: left;
+}
+
+@media (max-width: 1180px) {
+  .grid-top,
+  .grid-bottom {
+    flex-direction: column;
+  }
+
+  .metric-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}

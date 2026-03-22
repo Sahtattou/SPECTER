@@ -18,7 +18,7 @@ agents-install: venv
   .venv/bin/python -m pip install -r agents/requirements.txt
 
 dashboard-install: venv
-  .venv/bin/python -m pip install streamlit requests
+  npm install --prefix frontend
 
 test-py-install: venv
   .venv/bin/python -m pip install pytest
@@ -69,7 +69,10 @@ run-agents: agents-install
   .venv/bin/uvicorn app.main:app --reload --port 8001 --app-dir agents
 
 run-dashboard: dashboard-install
-  .venv/bin/streamlit run dashboards/streamlit_app.py
+  npm run tauri dev --prefix frontend
+
+build-dashboard: dashboard-install
+  npm run tauri --prefix frontend -- build --bundles deb,rpm
 
 # Tests and quality 
 

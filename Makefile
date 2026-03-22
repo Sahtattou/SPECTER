@@ -5,10 +5,10 @@ PYTHON := .venv/bin/python
 PIP := $(PYTHON) -m pip
 
 .PHONY: default help \
-	setup venv agents-install dashboard-install test-py-install \
+	setup venv agents-install dashboard-install test-py-install frontend-install \
 	run-api run-worker run-collector run-local stop-local status-local logs-local restart-local \
 	build-api build-worker build-collector build \
-	run-agents run-dashboard \
+	run-agents run-dashboard build-dashboard \
 	test-go test-py test \
 	fmt vet tidy lint check-go check ci-check \
 	seed agent-smoke demo-rehearse offline-load bundle clean bootstrap
@@ -28,8 +28,11 @@ venv: ## Create Python virtual environment if missing
 agents-install: venv ## Install Python dependencies for agents service
 	$(PIP) install -r agents/requirements.txt
 
-dashboard-install: venv ## Install Python dependencies for dashboard
-	$(PIP) install streamlit requests
+dashboard-install: frontend-install ## Install desktop dashboard dependencies
+	@printf "Dashboard dependencies installed via frontend-install\n"
+
+frontend-install: ## Install Tauri React frontend dependencies
+	npm install --prefix frontend
 
 test-py-install: venv ## Install Python test dependency
 	$(PIP) install pytest
@@ -75,8 +78,11 @@ build: build-api build-worker build-collector ## Build all Go binaries
 run-agents: agents-install ## Run Python agents API (uvicorn)
 	.venv/bin/uvicorn app.main:app --reload --port 8001 --app-dir agents
 
-run-dashboard: dashboard-install ## Run Streamlit dashboard
-	.venv/bin/streamlit run dashboards/streamlit_app.py
+run-dashboard: dashboard-install ## Run Tauri desktop dashboard
+	npm run tauri dev --prefix frontend
+
+build-dashboard: dashboard-install ## Build Tauri desktop dashboard bundle (deb/rpm)
+	npm run tauri --prefix frontend -- build --bundles deb,rpm
 
 test-go: ## Run Go tests
 	go test ./... -v
@@ -129,4 +135,4 @@ bootstrap: setup venv agents-install dashboard-install test-py-install ## Prepar
 	@printf "  1) Edit .env if needed\n"
 	@printf "  2) Start core services: make run-local\n"
 	@printf "  3) Start agents API: make run-agents\n"
-	@printf "  4) Start dashboard: make run-dashboard\n"
+	@printf "  4) Start desktop dashboard: make run-dashboard\n"

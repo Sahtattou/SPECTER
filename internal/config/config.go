@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	APIPort                   string
+	APIAllowedOrigins         []string
 	WorkerConcurrency         int
 	CollectionIntervalSeconds int
 	DBDSN                     string
@@ -39,6 +40,7 @@ func Load() Config {
 
 	cfg := Config{
 		APIPort:                   env("API_PORT", "8080"),
+		APIAllowedOrigins:         envCSVWithDefault("API_ALLOWED_ORIGINS", []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost"}),
 		WorkerConcurrency:         envInt("WORKER_CONCURRENCY", 4),
 		CollectionIntervalSeconds: envInt("COLLECTION_INTERVAL_SECONDS", 60),
 		DBDSN:                     env("DB_DSN", "file:specter.db?_busy_timeout=5000&_journal_mode=WAL"),
@@ -59,6 +61,15 @@ func Load() Config {
 	}
 
 	return cfg
+}
+
+func envCSVWithDefault(k string, def []string) []string {
+	if out := envCSV(k); len(out) > 0 {
+		return out
+	}
+	clone := make([]string, len(def))
+	copy(clone, def)
+	return clone
 }
 
 func env(k, def string) string {

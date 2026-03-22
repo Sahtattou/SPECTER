@@ -19,9 +19,60 @@ DASHBOARD_PID_FILE="${RUN_DIR}/dashboard.pid"
 
 API_PORT="${API_PORT:-8080}"
 AGENTS_PORT="${AGENTS_PORT:-8001}"
-DASHBOARD_PORT="${DASHBOARD_PORT:-8501}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-5173}"
 
 mkdir -p "${RUN_DIR}" "${LOG_DIR}"
+
+merge_origins() {
+  local base="$1"
+  shift
+
+  local merged="${base}"
+  local origin
+  for origin in "$@"; do
+    [[ -z "$origin" ]] && continue
+    if [[ -z "$merged" ]]; then
+      merged="$origin"
+      continue
+    fi
+    case ",$merged," in
+      *",${origin},"*) ;;
+      *) merged="${merged},${origin}" ;;
+    esac
+  done
+
+  printf '%s' "$merged"
+}
+
+is_descendant_of() {
+  local pid="$1"
+  local ancestor="$2"
+
+  if [[ -z "$pid" || -z "$ancestor" ]]; then
+    return 1
+  fi
+
+  while [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 ]]; do
+    if [[ "$pid" == "$ancestor" ]]; then
+      return 0
+    fi
+
+    if [[ ! -r "/proc/${pid}/status" ]]; then
+      return 1
+    fi
+
+    local ppid=""
+    ppid="$(awk '/^PPid:/ {print $2}' "/proc/${pid}/status" 2>/dev/null || true)"
+
+    if [[ -z "$ppid" || "$ppid" == "0" || "$ppid" == "$pid" ]]; then
+      return 1
+    fi
+
+    pid="$ppid"
+  done
+
+  return 1
+}
 
 stop_orphan_processes() {
   local name="$1"
@@ -48,8 +99,14 @@ stop_orphan_processes() {
       collector) [[ -f "$COLLECTOR_PID_FILE" ]] && tracked_pid="$(cat "$COLLECTOR_PID_FILE")" ;;
     esac
 
-    if [[ -n "$tracked_pid" && "$pid" == "$tracked_pid" ]]; then
-      continue
+    if [[ -n "$tracked_pid" ]]; then
+      if [[ "$pid" == "$tracked_pid" ]]; then
+        continue
+      fi
+
+      if is_descendant_of "$pid" "$tracked_pid"; then
+        continue
+      fi
     fi
 
     echo "[run-local] stopping orphan ${name} process (pid ${pid})"
@@ -79,7 +136,11 @@ start_service() {
   fi
 
   echo "[run-local] starting ${name}"
-  bash -lc "cd \"${ROOT_DIR}\" && ${command}" >"$log_file" 2>&1 &
+  if command -v setsid >/dev/null 2>&1; then
+    setsid bash -lc "cd \"${ROOT_DIR}\" && ${command}" < /dev/null >"$log_file" 2>&1 &
+  else
+    nohup bash -lc "cd \"${ROOT_DIR}\" && ${command}" < /dev/null >"$log_file" 2>&1 &
+  fi
   local pid=$!
   echo "$pid" > "$pid_file"
 }
@@ -142,6 +203,14 @@ show_status() {
 }
 
 start_all() {
+  local localhost_origin="http://localhost:${DASHBOARD_PORT}"
+  local loopback_origin="http://127.0.0.1:${DASHBOARD_PORT}"
+
+  API_ALLOWED_ORIGINS="$(merge_origins "${API_ALLOWED_ORIGINS:-}" "$localhost_origin" "$loopback_origin" "http://localhost:1420" "http://127.0.0.1:1420" "tauri://localhost")"
+  AGENT_ALLOWED_ORIGINS="$(merge_origins "${AGENT_ALLOWED_ORIGINS:-}" "$localhost_origin" "$loopback_origin" "http://localhost:1420" "http://127.0.0.1:1420" "tauri://localhost")"
+  export API_ALLOWED_ORIGINS
+  export AGENT_ALLOWED_ORIGINS
+
   stop_orphan_processes "api" "(/tmp/go-build|\.cache/go-build).*/(api)( |$)"
   stop_orphan_processes "worker" "(/tmp/go-build|\.cache/go-build).*/(worker)( |$)"
   stop_orphan_processes "collector" "(/tmp/go-build|\.cache/go-build).*/(collector)( |$)"
@@ -156,10 +225,10 @@ start_all() {
     echo "[run-local] agents not started (.venv/bin/uvicorn missing). Run bootstrap first."
   fi
 
-  if [[ -x "${ROOT_DIR}/.venv/bin/streamlit" ]]; then
-    start_service "dashboard" "$DASHBOARD_PID_FILE" "$DASHBOARD_LOG" ".venv/bin/streamlit run dashboards/streamlit_app.py --server.port ${DASHBOARD_PORT} --server.headless true"
+  if command -v npm >/dev/null 2>&1; then
+    start_service "dashboard" "$DASHBOARD_PID_FILE" "$DASHBOARD_LOG" "CI=true npm run dev --prefix frontend -- --host 127.0.0.1 --port ${DASHBOARD_PORT} --strictPort"
   else
-    echo "[run-local] dashboard not started (.venv/bin/streamlit missing). Run bootstrap first."
+    echo "[run-local] dashboard not started (npm missing). Install Node.js and run bootstrap first."
   fi
 
   wait_for_http "Go API" "http://127.0.0.1:${API_PORT}/health" 20 || true
