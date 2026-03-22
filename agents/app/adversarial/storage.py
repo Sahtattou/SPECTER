@@ -14,6 +14,17 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_iso_to_utc(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
+    except ValueError:
+        return None
+
+
 class AdversarialStorage:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -225,7 +236,44 @@ class AdversarialStorage:
                 "SELECT COUNT(*) AS c FROM injections WHERE detected = 1"
             ).fetchone()["c"]
 
+            freshness_row = conn.execute(
+                "SELECT MAX(collected_at) AS last_event_collected_at, MAX(updated_at) AS last_event_updated_at FROM mirror_events"
+            ).fetchone()
+            per_source_rows = conn.execute(
+                "SELECT source_name, MAX(updated_at) AS last_updated_at FROM mirror_events GROUP BY source_name"
+            ).fetchall()
+
         catch_rate = 0.0 if injections == 0 else round((caught / injections) * 100.0, 2)
+
+        last_collected_at = (
+            freshness_row["last_event_collected_at"]
+            if freshness_row is not None
+            else None
+        )
+        last_updated_at = (
+            freshness_row["last_event_updated_at"]
+            if freshness_row is not None
+            else None
+        )
+        updated_dt = _parse_iso_to_utc(last_updated_at)
+        now = datetime.now(timezone.utc)
+        freshness_age_seconds = (
+            None
+            if updated_dt is None
+            else max(int((now - updated_dt).total_seconds()), 0)
+        )
+
+        source_freshness_age_seconds: Dict[str, int] = {}
+        for row in per_source_rows:
+            source_name = str(row["source_name"] or "unknown").strip() or "unknown"
+            source_updated_at = row["last_updated_at"]
+            source_dt = _parse_iso_to_utc(source_updated_at)
+            if source_dt is None:
+                continue
+            source_freshness_age_seconds[source_name] = max(
+                int((now - source_dt).total_seconds()), 0
+            )
+
         return {
             "total_events": total,
             "validated_events": validated,
@@ -233,6 +281,12 @@ class AdversarialStorage:
             "total_injections": injections,
             "caught_injections": caught,
             "catch_rate_percent": catch_rate,
+            "last_event_collected_at": last_collected_at,
+            "last_event_updated_at": last_updated_at,
+            "freshness_age_seconds": freshness_age_seconds,
+            "distinct_sources": len(source_freshness_age_seconds),
+            "source_freshness_age_seconds": source_freshness_age_seconds,
+            "metrics_generated_at": utc_now_iso(),
         }
 
     @staticmethod

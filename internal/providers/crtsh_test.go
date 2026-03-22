@@ -7,7 +7,7 @@ import (
 )
 
 func TestCrtShProviderCollect(t *testing.T) {
-	provider := NewCRTShProvider("%.example")
+	provider := NewCRTShProvider("%.example", true, true, 200)
 
 	records, err := provider.Collect(context.Background())
 

@@ -254,6 +254,9 @@ Environment loading behavior differs by entrypoint:
 | `OTX_TARGETS` | Comma-separated OTX collector targets | empty |
 | `URLHAUS_HOSTS` | Comma-separated URLHaus host targets | empty |
 | `CRTSH_QUERY` | crt.sh query string | empty |
+| `CRTSH_DEDUPLICATE` | Add `deduplicate=Y` for crt.sh query | `true` |
+| `CRTSH_EXCLUDE_EXPIRED` | Add `exclude=expired` for crt.sh query | `true` |
+| `CRTSH_MAX_RESULTS` | Max unique domains accepted per crt.sh collection run (`0` = no cap) | `1000` |
 
 Collector note:
 
@@ -300,6 +303,14 @@ Defined in `internal/api/router.go`:
 - `POST /api/v1/exports/stix`
 - `POST /api/v1/exports/report`
 - `POST /api/v1/agents/injections/trigger`
+
+`GET /api/v1/metrics/pipeline` now includes freshness fields to verify continuous pulls under upsert-heavy workloads:
+
+- `last_collected_at`
+- `last_updated_at`
+- `freshness_age_seconds`
+- `distinct_sources`
+- `source_freshness_age_seconds`
 
 ### Agents API (default `:8001`)
 

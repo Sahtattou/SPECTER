@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from app.adversarial.service import AdversarialMirrorService
 from app.adversarial.detector import Detector
 from app.adversarial.queue_manager import SharedQueueManager
 from app.adversarial.red_agent import ATTACK_TYPES, RedAgent
@@ -56,3 +57,65 @@ def test_red_agent_auto_loop_respects_should_inject_gate(tmp_path) -> None:
         assert len(injections) == 0
     finally:
         red.stop()
+
+
+class _FakeGoClient:
+    def __init__(self, events):
+        self._events = events
+
+    def set_events(self, events):
+        self._events = events
+
+    def get_recent_events(self, limit: int = 50):
+        return self._events[:limit]
+
+
+def test_go_sync_updates_existing_event_when_collected_at_changes(tmp_path) -> None:
+    db_path = str(tmp_path / "adversarial_sync.db")
+    fake = _FakeGoClient(
+        [
+            {
+                "event_id": "evt-1",
+                "ioc_value": "alpha.example",
+                "ioc_type": "domain",
+                "source_name": "otx",
+                "collected_at": "2026-03-22T10:00:00Z",
+                "corroboration_count": 1,
+                "is_synthetic": False,
+            }
+        ]
+    )
+
+    service = AdversarialMirrorService(
+        db_path=db_path,
+        red_agent_interval_seconds=9999,
+        red_max_ratio=1.0,
+        min_real_events_before_auto_red=0,
+        go_sync_interval_seconds=15,
+        go_sync_batch_limit=20,
+        go_sync_on_startup=True,
+        go_client=fake,
+    )
+
+    service._sync_go_events_once()
+    first = service.get_events(limit=1)[0]
+    assert first["collected_at"] == "2026-03-22T10:00:00Z"
+
+    fake.set_events(
+        [
+            {
+                "event_id": "evt-1",
+                "ioc_value": "alpha.example",
+                "ioc_type": "domain",
+                "source_name": "otx",
+                "collected_at": "2026-03-22T10:05:00Z",
+                "corroboration_count": 1,
+                "is_synthetic": False,
+            }
+        ]
+    )
+    service._sync_go_events_once()
+
+    second = service.get_events(limit=1)[0]
+    assert second["ioc_uuid"] == "evt-1"
+    assert second["collected_at"] == "2026-03-22T10:05:00Z"

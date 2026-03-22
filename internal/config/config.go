@@ -22,11 +22,14 @@ type Config struct {
 	LogLevel string
 	DemoMode bool
 
-	ShodanTargets    []string
-	AbuseIPDBTargets []string
-	OTXTargets       []string
-	URLHausHosts     []string
-	CRTShQuery       string
+	ShodanTargets       []string
+	AbuseIPDBTargets    []string
+	OTXTargets          []string
+	URLHausHosts        []string
+	CRTShQuery          string
+	CRTShDeduplicate    bool
+	CRTShExcludeExpired bool
+	CRTShMaxResults     int
 }
 
 func Load() Config {
@@ -50,6 +53,9 @@ func Load() Config {
 		OTXTargets:                envCSV("OTX_TARGETS"),
 		URLHausHosts:              envCSV("URLHAUS_HOSTS"),
 		CRTShQuery:                strings.TrimSpace(os.Getenv("CRTSH_QUERY")),
+		CRTShDeduplicate:          envBool("CRTSH_DEDUPLICATE", true),
+		CRTShExcludeExpired:       envBool("CRTSH_EXCLUDE_EXPIRED", true),
+		CRTShMaxResults:           envInt("CRTSH_MAX_RESULTS", 1000),
 	}
 
 	return cfg

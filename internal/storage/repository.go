@@ -20,7 +20,16 @@ type Repository interface {
 	ListByStage(ctx context.Context, stage string) ([]models.ThreatRecord, error)
 	ListAll(ctx context.Context) ([]models.ThreatRecord, error)
 	GetByEventID(ctx context.Context, eventID string) (models.ThreatRecord, error)
+	GetFreshnessSummary(ctx context.Context) (FreshnessSummary, error)
 	Close() error
+}
+
+type FreshnessSummary struct {
+	TotalEvents        int
+	LastCollectedAt    *time.Time
+	LastUpdatedAt      *time.Time
+	DistinctSources    int
+	PerSourceFreshness map[string]time.Time
 }
 
 type SQLiteRepository struct {
@@ -155,6 +164,90 @@ FROM threat_records WHERE event_id = ? LIMIT 1
 		return models.ThreatRecord{}, err
 	}
 	return rec, nil
+}
+
+func (r *SQLiteRepository) GetFreshnessSummary(ctx context.Context) (FreshnessSummary, error) {
+	const overallQ = `
+SELECT COUNT(*), MAX(collected_at), MAX(updated_at), COUNT(DISTINCT source_name)
+FROM threat_records
+`
+
+	var (
+		total           int
+		lastCollectedNS sql.NullString
+		lastUpdatedNS   sql.NullString
+		distinctSources int
+	)
+
+	if err := r.db.QueryRowContext(ctx, overallQ).Scan(&total, &lastCollectedNS, &lastUpdatedNS, &distinctSources); err != nil {
+		return FreshnessSummary{}, err
+	}
+
+	parseTS := func(ns sql.NullString) (*time.Time, error) {
+		if !ns.Valid || ns.String == "" {
+			return nil, nil
+		}
+		t, err := time.Parse(time.RFC3339Nano, ns.String)
+		if err != nil {
+			t, err = time.Parse("2006-01-02 15:04:05.999999999Z07:00", ns.String)
+		}
+		if err != nil {
+			return nil, err
+		}
+		u := t.UTC()
+		return &u, nil
+	}
+
+	lastCollectedAt, err := parseTS(lastCollectedNS)
+	if err != nil {
+		return FreshnessSummary{}, err
+	}
+	lastUpdatedAt, err := parseTS(lastUpdatedNS)
+	if err != nil {
+		return FreshnessSummary{}, err
+	}
+
+	const perSourceQ = `
+SELECT source_name, MAX(updated_at)
+FROM threat_records
+GROUP BY source_name
+`
+	rows, err := r.db.QueryContext(ctx, perSourceQ)
+	if err != nil {
+		return FreshnessSummary{}, err
+	}
+	defer rows.Close()
+
+	perSource := make(map[string]time.Time)
+	for rows.Next() {
+		var source string
+		var updatedNS sql.NullString
+		if err := rows.Scan(&source, &updatedNS); err != nil {
+			return FreshnessSummary{}, err
+		}
+		if !updatedNS.Valid || updatedNS.String == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339Nano, updatedNS.String)
+		if err != nil {
+			t, err = time.Parse("2006-01-02 15:04:05.999999999Z07:00", updatedNS.String)
+		}
+		if err != nil {
+			return FreshnessSummary{}, err
+		}
+		perSource[source] = t.UTC()
+	}
+	if err := rows.Err(); err != nil {
+		return FreshnessSummary{}, err
+	}
+
+	return FreshnessSummary{
+		TotalEvents:        total,
+		LastCollectedAt:    lastCollectedAt,
+		LastUpdatedAt:      lastUpdatedAt,
+		DistinctSources:    distinctSources,
+		PerSourceFreshness: perSource,
+	}, nil
 }
 
 func scanRows(rows *sql.Rows) ([]models.ThreatRecord, error) {

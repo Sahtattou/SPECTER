@@ -16,15 +16,24 @@ type crtShEntry struct {
 }
 
 type CRTShProvider struct {
-	client *resty.Client
-	query  string
+	client         *resty.Client
+	query          string
+	deduplicate    bool
+	excludeExpired bool
+	maxResults     int
 }
 
-func NewCRTShProvider(query string) *CRTShProvider {
+func NewCRTShProvider(query string, deduplicate bool, excludeExpired bool, maxResults int) *CRTShProvider {
 	q := strings.TrimSpace(query)
+	if maxResults < 0 {
+		maxResults = 0
+	}
 	return &CRTShProvider{
-		client: resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
-		query:  q,
+		client:         resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
+		query:          q,
+		deduplicate:    deduplicate,
+		excludeExpired: excludeExpired,
+		maxResults:     maxResults,
 	}
 }
 
@@ -54,12 +63,18 @@ func (p *CRTShProvider) Collect(ctx context.Context) ([]models.Threat, error) {
 		}
 
 		result = nil
-		resp, err = p.client.R().
+		req := p.client.R().
 			SetContext(ctx).
 			SetQueryParam("q", p.query).
 			SetQueryParam("output", "json").
-			SetResult(&result).
-			Get("https://crt.sh/")
+			SetResult(&result)
+		if p.deduplicate {
+			req.SetQueryParam("deduplicate", "Y")
+		}
+		if p.excludeExpired {
+			req.SetQueryParam("exclude", "expired")
+		}
+		resp, err = req.Get("https://crt.sh/")
 		if err != nil {
 			if attempt == len(retryDelays)-1 {
 				return nil, fmt.Errorf("crt.sh request failed: %w", err)
@@ -110,6 +125,9 @@ func (p *CRTShProvider) Collect(ctx context.Context) ([]models.Threat, error) {
 				CollectedAt:   time.Now().UTC(),
 				Corroboration: 1,
 			})
+			if p.maxResults > 0 && len(threats) >= p.maxResults {
+				return threats, nil
+			}
 		}
 	}
 

@@ -22,7 +22,7 @@ SHODAN_TARGETS=1.1.1.1,8.8.8.8
 ABUSEIPDB_TARGETS=1.1.1.1
 OTX_TARGETS=example.org,1.1.1.1
 URLHAUS_HOSTS=example.org
-CRTSH_QUERY=%25.example.org
+CRTSH_QUERY=%.example.org
 ```
 
 If target lists are empty, collector runs but has no real-source pull workload.
@@ -182,6 +182,9 @@ Manual red trigger endpoints still work regardless of auto-loop guardrails.
 4. **Dashboard shows stale/empty data**
    - Cause: agents service unavailable or mirror database newly initialized.
    - Fix: verify `http://localhost:8001/health`, then run `./scripts/seed_demo_data.sh` and `./scripts/agent_smoke.sh`.
+   - Refresh note: dashboard auto-refresh defaults to a live interval now (10s). If manually set to `0`, ingestion panels will not update until manual rerun.
+   - Metrics note: `GET /mirror/metrics` now returns freshness signals (`metrics_generated_at`, `last_event_updated_at`, `freshness_age_seconds`, `source_freshness_age_seconds`) that the dashboard renders in Pipeline Metrics.
+   - Count accuracy note: pipeline totals (`Total`, `Scored`, `Quarantined`) are sourced from Go API `GET /api/v1/metrics/pipeline`; red/injection dynamics remain sourced from agents `GET /mirror/metrics`.
 
 5. **Local run command starts only partial services**
    - Cause: missing `.venv/bin/uvicorn` or `.venv/bin/streamlit`.
@@ -190,3 +193,7 @@ Manual red trigger endpoints still work regardless of auto-loop guardrails.
 6. **Real telemetry appears stale or only example data shows up**
    - Cause: collector targets are deterministic seeds or empty target lists; multiple orphan collectors can also overwrite visibility.
    - Fix: set explicit non-demo targets in `.env` (`SHODAN_TARGETS`, `ABUSEIPDB_TARGETS`, `OTX_TARGETS`, `URLHAUS_HOSTS`, `CRTSH_QUERY`), keep `DEMO_MODE=false`, and restart with `./scripts/run_local.sh restart`.
+
+7. **Looks like collector only pulled once after startup**
+   - Cause: total-event counts can stay flat under upsert, even while rows are refreshed.
+   - Fix: check freshness fields on `GET /api/v1/metrics/pipeline` (`last_updated_at`, `freshness_age_seconds`, `source_freshness_age_seconds`) to confirm ongoing pulls.

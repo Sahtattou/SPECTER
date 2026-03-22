@@ -62,6 +62,18 @@ Policy: minimal documentation footprint (README + RUNNING_GUIDE + TEAM_TASK_LIST
     - Scope: `internal/config/config.go`, `cmd/collector/main.go`, provider constructors
     - Done criteria: real telemetry collection requires explicit targets (`SHODAN_TARGETS`, `ABUSEIPDB_TARGETS`, `OTX_TARGETS`, `URLHAUS_HOSTS`, `CRTSH_QUERY`), preventing stale example-only refresh loops
 
+13. [Done] Keep ingested dashboard feed refreshing after first load
+    - Scope: `dashboards/streamlit_app.py`, `agents/app/adversarial/service.py`
+    - Done criteria: dashboard auto-refresh defaults to active interval and mirror sync re-ingests recurring Go event updates when `collected_at` changes for existing event IDs
+
+14. [Done] Keep metrics panel visibly refreshing with freshness telemetry
+    - Scope: `agents/app/adversarial/storage.py`, `dashboards/streamlit_app.py`
+    - Done criteria: metrics API and dashboard expose live freshness tick + per-source freshness ages on each auto-refresh cycle
+
+15. [Done] Correct pipeline count source-of-truth in dashboard metrics
+    - Scope: `dashboards/streamlit_app.py`
+    - Done criteria: pipeline total/scored/quarantined counters come from Go API metrics endpoint while mirror endpoint remains for red-agent/injection analytics
+
 ## Ownership placeholders
 - Go Core: __________________
 - Agents/Adversarial: __________________

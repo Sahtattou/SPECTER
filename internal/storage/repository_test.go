@@ -114,3 +114,69 @@ func TestSQLiteRepository_ListByStage(t *testing.T) {
 		t.Fatalf("unexpected quarantined result: %+v", q)
 	}
 }
+
+func TestSQLiteRepository_GetFreshnessSummary(t *testing.T) {
+	repo, err := NewSQLiteRepository("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository error: %v", err)
+	}
+	defer repo.Close()
+
+	now := time.Now().UTC()
+	later := now.Add(30 * time.Second)
+
+	records := []models.ThreatRecord{
+		{
+			EventID:         "evt-f1",
+			IOCValue:        "one.example",
+			IOCType:         "domain",
+			SourceName:      "otx",
+			RawEvidenceJSON: "{}",
+			CollectedAt:     now,
+			PipelineStage:   "scored",
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		},
+		{
+			EventID:         "evt-f2",
+			IOCValue:        "two.example",
+			IOCType:         "domain",
+			SourceName:      "shodan",
+			RawEvidenceJSON: "{}",
+			CollectedAt:     later,
+			PipelineStage:   "scored",
+			CreatedAt:       later,
+			UpdatedAt:       later,
+		},
+	}
+
+	for _, rec := range records {
+		if err := repo.UpsertRecord(context.Background(), rec); err != nil {
+			t.Fatalf("UpsertRecord error: %v", err)
+		}
+	}
+
+	summary, err := repo.GetFreshnessSummary(context.Background())
+	if err != nil {
+		t.Fatalf("GetFreshnessSummary error: %v", err)
+	}
+
+	if summary.TotalEvents != 2 {
+		t.Fatalf("expected TotalEvents=2, got %d", summary.TotalEvents)
+	}
+	if summary.DistinctSources != 2 {
+		t.Fatalf("expected DistinctSources=2, got %d", summary.DistinctSources)
+	}
+	if summary.LastCollectedAt == nil || !summary.LastCollectedAt.Equal(later) {
+		t.Fatalf("unexpected LastCollectedAt: %+v", summary.LastCollectedAt)
+	}
+	if summary.LastUpdatedAt == nil || !summary.LastUpdatedAt.Equal(later) {
+		t.Fatalf("unexpected LastUpdatedAt: %+v", summary.LastUpdatedAt)
+	}
+	if len(summary.PerSourceFreshness) != 2 {
+		t.Fatalf("expected 2 per-source entries, got %d", len(summary.PerSourceFreshness))
+	}
+	if got, ok := summary.PerSourceFreshness["shodan"]; !ok || !got.Equal(later) {
+		t.Fatalf("unexpected shodan freshness: %v %v", ok, got)
+	}
+}

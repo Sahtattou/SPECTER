@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from app.adversarial.blue_agent import BlueAgent
 from app.adversarial.detector import Detector
@@ -14,6 +14,10 @@ from app.adversarial.storage import AdversarialStorage
 from app.clients.go_api_client import GoAPIClient
 
 logger = logging.getLogger(__name__)
+
+
+class RecentEventsClient(Protocol):
+    def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]: ...
 
 
 class AdversarialMirrorService:
@@ -27,7 +31,7 @@ class AdversarialMirrorService:
         go_sync_interval_seconds: int,
         go_sync_batch_limit: int,
         go_sync_on_startup: bool,
-        go_client: Optional[GoAPIClient] = None,
+        go_client: Optional[RecentEventsClient] = None,
         source_clients: Optional[Dict[str, Callable[[str], Dict[str, Any]]]] = None,
     ) -> None:
         self.storage = AdversarialStorage(db_path=db_path)
@@ -45,6 +49,7 @@ class AdversarialMirrorService:
         self._go_sync_thread: Optional[threading.Thread] = None
         self._go_sync_stop = threading.Event()
         self._seen_real_event_ids: set[str] = set()
+        self._seen_real_event_collected_at: Dict[str, str] = {}
         self._auto_red_last_allowed: Optional[bool] = None
         self._auto_red_last_reason: str = "not-evaluated"
         self._auto_red_last_ratio: float = 0.0
@@ -80,6 +85,10 @@ class AdversarialMirrorService:
         self.queue.enqueue(enriched)
         if envelope.ioc_uuid:
             self._seen_real_event_ids.add(envelope.ioc_uuid)
+            if envelope.collected_at:
+                self._seen_real_event_collected_at[envelope.ioc_uuid] = str(
+                    envelope.collected_at
+                )
         return enriched.to_dict()
 
     def trigger_injection(self, attack_type: Optional[str] = None) -> Dict[str, Any]:
@@ -196,10 +205,22 @@ class AdversarialMirrorService:
         recent = self.go_client.get_recent_events(limit=self.go_sync_batch_limit)
         for event in recent:
             event_id = str(event.get("event_id") or "").strip()
-            if not event_id or event_id in self._seen_real_event_ids:
+            if not event_id:
                 continue
+
+            incoming_collected_at = str(event.get("collected_at") or "").strip()
+            previous_collected_at = self._seen_real_event_collected_at.get(event_id)
+
+            if event_id in self._seen_real_event_ids and (
+                not incoming_collected_at
+                or incoming_collected_at == previous_collected_at
+            ):
+                continue
+
             if bool(event.get("is_synthetic")):
                 self._seen_real_event_ids.add(event_id)
+                if incoming_collected_at:
+                    self._seen_real_event_collected_at[event_id] = incoming_collected_at
                 continue
 
             payload = {
@@ -210,7 +231,7 @@ class AdversarialMirrorService:
                 "source_url": event.get("source_url"),
                 "source_query": event.get("source_query"),
                 "raw_evidence": event.get("raw_evidence") or {},
-                "collected_at": event.get("collected_at") or "",
+                "collected_at": incoming_collected_at,
                 "corroboration_count": event.get("corroboration_count") or 1,
                 "open_ports": event.get("open_ports") or [],
                 "asn": event.get("asn"),
@@ -219,6 +240,8 @@ class AdversarialMirrorService:
             }
             self.ingest_real_ioc(payload)
             self._seen_real_event_ids.add(event_id)
+            if incoming_collected_at:
+                self._seen_real_event_collected_at[event_id] = incoming_collected_at
 
     def _warm_seen_event_ids(self) -> None:
         events = self.storage.get_recent_events(limit=1000)
@@ -226,3 +249,6 @@ class AdversarialMirrorService:
             ioc_uuid = str(event.get("ioc_uuid") or "").strip()
             if ioc_uuid:
                 self._seen_real_event_ids.add(ioc_uuid)
+                collected_at = str(event.get("collected_at") or "").strip()
+                if collected_at:
+                    self._seen_real_event_collected_at[ioc_uuid] = collected_at

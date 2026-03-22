@@ -27,7 +27,12 @@ func main() {
 	providerList := make([]providers.Provider, 0, 5)
 
 	if cfg.CRTShQuery != "" {
-		providerList = append(providerList, providers.NewCRTShProvider(cfg.CRTShQuery))
+		providerList = append(providerList, providers.NewCRTShProvider(
+			cfg.CRTShQuery,
+			cfg.CRTShDeduplicate,
+			cfg.CRTShExcludeExpired,
+			cfg.CRTShMaxResults,
+		))
 	}
 
 	if len(cfg.ShodanTargets) > 0 {
