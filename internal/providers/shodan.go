@@ -10,20 +10,23 @@ import (
 )
 
 type ShodanProvider struct {
-	client *shodan.Client
+	client  *shodan.Client
+	targets []string
 }
 
-func NewShodanProvider(apiKey string) *ShodanProvider {
-	return &ShodanProvider{client: shodan.NewClient(nil, apiKey)}
+func NewShodanProvider(apiKey string, targets []string) *ShodanProvider {
+	return &ShodanProvider{client: shodan.NewClient(nil, apiKey), targets: targets}
 }
 
 func (p *ShodanProvider) Name() string { return "shodan" }
 
 func (p *ShodanProvider) Collect(ctx context.Context) ([]models.Threat, error) {
-	seedIPs := []string{"8.8.8.8"}
-	out := make([]models.Threat, 0, len(seedIPs))
+	if len(p.targets) == 0 {
+		return nil, nil
+	}
+	out := make([]models.Threat, 0, len(p.targets))
 
-	for _, ip := range seedIPs {
+	for _, ip := range p.targets {
 		host, err := p.client.GetServicesForHost(ctx, ip, nil)
 		if err != nil {
 			return nil, fmt.Errorf("shodan lookup failed for %s: %w", ip, err)

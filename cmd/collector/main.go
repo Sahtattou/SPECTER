@@ -24,19 +24,64 @@ func main() {
 	}
 	defer repo.Close()
 
-	providerList := []providers.Provider{
-		providers.NewCRTShProvider(),
-		providers.NewShodanProvider(cfg.ShodanAPIKey),
-		providers.NewURLHausProvider(cfg.URLHausAPIKey),
-		providers.NewAbuseIPDBProvider(cfg.AbuseIPDBAPIKey),
-		providers.NewOTXProvider(cfg.OTXAPIKey),
+	providerList := make([]providers.Provider, 0, 5)
+
+	if cfg.CRTShQuery != "" {
+		providerList = append(providerList, providers.NewCRTShProvider(cfg.CRTShQuery))
+	}
+
+	if len(cfg.ShodanTargets) > 0 {
+		if cfg.ShodanAPIKey == "" {
+			log.Printf("collector skipping shodan: SHODAN_TARGETS set but SHODAN_API_KEY is empty")
+		} else {
+			providerList = append(providerList, providers.NewShodanProvider(cfg.ShodanAPIKey, cfg.ShodanTargets))
+		}
+	}
+	if len(cfg.URLHausHosts) > 0 {
+		if cfg.URLHausAPIKey == "" {
+			log.Printf("collector skipping urlhaus: URLHAUS_HOSTS set but URLHAUS_API_KEY is empty")
+		} else {
+			providerList = append(providerList, providers.NewURLHausProvider(cfg.URLHausAPIKey, cfg.URLHausHosts))
+		}
+	}
+	if len(cfg.AbuseIPDBTargets) > 0 {
+		if cfg.AbuseIPDBAPIKey == "" {
+			log.Printf("collector skipping abuseipdb: ABUSEIPDB_TARGETS set but ABUSEIPDB_API_KEY is empty")
+		} else {
+			providerList = append(providerList, providers.NewAbuseIPDBProvider(cfg.AbuseIPDBAPIKey, cfg.AbuseIPDBTargets))
+		}
+	}
+	if len(cfg.OTXTargets) > 0 {
+		if cfg.OTXAPIKey == "" {
+			log.Printf("collector skipping otx: OTX_TARGETS set but OTX_API_KEY is empty")
+		} else {
+			providerList = append(providerList, providers.NewOTXProvider(cfg.OTXAPIKey, cfg.OTXTargets))
+		}
+	}
+
+	if len(providerList) == 0 {
+		log.Printf("collector warning: no providers configured; set SHODAN_TARGETS, ABUSEIPDB_TARGETS, OTX_TARGETS, URLHAUS_HOSTS, or CRTSH_QUERY")
 	}
 
 	interval := time.Duration(cfg.CollectionIntervalSeconds) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	log.Printf("collector started interval=%s providers=%d", interval, len(providerList))
+	activeProviders := make([]string, 0, len(providerList))
+	for _, p := range providerList {
+		activeProviders = append(activeProviders, p.Name())
+	}
+	log.Printf(
+		"collector started interval=%s providers=%d active=%v targets={shodan:%d abuseipdb:%d otx:%d urlhaus:%d crtsh:%t}",
+		interval,
+		len(providerList),
+		activeProviders,
+		len(cfg.ShodanTargets),
+		len(cfg.AbuseIPDBTargets),
+		len(cfg.OTXTargets),
+		len(cfg.URLHausHosts),
+		cfg.CRTShQuery != "",
+	)
 
 	collectAll := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

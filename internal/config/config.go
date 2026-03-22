@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -20,12 +21,20 @@ type Config struct {
 
 	LogLevel string
 	DemoMode bool
+
+	ShodanTargets    []string
+	AbuseIPDBTargets []string
+	OTXTargets       []string
+	URLHausHosts     []string
+	CRTShQuery       string
 }
 
 func Load() Config {
 	_ = godotenv.Load()
 
-	return Config{
+	demoMode := envBool("DEMO_MODE", false)
+
+	cfg := Config{
 		APIPort:                   env("API_PORT", "8080"),
 		WorkerConcurrency:         envInt("WORKER_CONCURRENCY", 4),
 		CollectionIntervalSeconds: envInt("COLLECTION_INTERVAL_SECONDS", 60),
@@ -35,8 +44,15 @@ func Load() Config {
 		ShodanAPIKey:              os.Getenv("SHODAN_API_KEY"),
 		URLHausAPIKey:             os.Getenv("URLHAUS_API_KEY"),
 		LogLevel:                  env("LOG_LEVEL", "INFO"),
-		DemoMode:                  envBool("DEMO_MODE", true),
+		DemoMode:                  demoMode,
+		ShodanTargets:             envCSV("SHODAN_TARGETS"),
+		AbuseIPDBTargets:          envCSV("ABUSEIPDB_TARGETS"),
+		OTXTargets:                envCSV("OTX_TARGETS"),
+		URLHausHosts:              envCSV("URLHAUS_HOSTS"),
+		CRTShQuery:                strings.TrimSpace(os.Getenv("CRTSH_QUERY")),
 	}
+
+	return cfg
 }
 
 func env(k, def string) string {
@@ -69,4 +85,20 @@ func envBool(k string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+func envCSV(k string) []string {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

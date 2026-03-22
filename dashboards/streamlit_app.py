@@ -235,6 +235,24 @@ with top_right:
         dyn[1].metric("RED Injected", total_injections)
         dyn[2].metric("DETECTOR Caught", caught)
         dyn[3].metric("DETECTOR Missed", max(total_injections - caught, 0))
+
+        balance = st.columns(4)
+        balance[0].metric("Red/Blue Ratio", metrics.get("red_blue_ratio", 0.0))
+        balance[1].metric("Ratio Limit", metrics.get("red_max_ratio", 1.0))
+        balance[2].metric(
+            "Min Real Before Auto-Red",
+            metrics.get("min_real_events_before_auto_red", 0),
+        )
+        gate_allowed = metrics.get("auto_red_last_allowed")
+        gate_label = (
+            "ALLOWED"
+            if gate_allowed is True
+            else ("THROTTLED" if gate_allowed is False else "UNKNOWN")
+        )
+        balance[3].metric("Auto-Red Gate", gate_label)
+        st.caption(
+            f"Auto-red reason: {metrics.get('auto_red_last_reason', 'n/a')} · Last evaluated ratio: {metrics.get('auto_red_last_ratio', 0.0)}"
+        )
         st.session_state["last_refresh_success_at"] = time.strftime(
             "%H:%M:%S UTC", time.gmtime()
         )

@@ -1,5 +1,7 @@
 # SPECTER
 
+Last validated: 2026-03-22 (local ci-check + service orchestration)
+
 SPECTER is a threat-intelligence prototype that ingests public OSINT indicators, normalizes and scores them, and exposes analyst-ready outputs through APIs, an agent service, and a dashboard.
 
 It is designed for a "collect -> validate -> score -> explain -> export" workflow, with a built-in adversarial mirror that simulates poisoning attempts and tracks detection performance.
@@ -18,8 +20,10 @@ Most student TI demos stop at data collection. SPECTER is built to show an end-t
 
 - Go collector that pulls and processes providers concurrently (`cmd/collector/main.go`)
 - Go API server for health, events, metrics, exports, and manual injections (`cmd/api/main.go`, `internal/api/`)
+- Go worker service that processes validated records with concurrency + graceful shutdown (`cmd/worker/main.go`)
 - SQLite-backed repository with schema initialization and indices (`internal/storage/repository.go`, `internal/storage/migrations/001_init.sql`)
 - Python FastAPI agent service with blue/red agent endpoints and adversarial mirror endpoints (`agents/app/main.py`)
+- Agent mirror red/blue balancing with auto-red guardrails + Go real-event sync (`agents/app/adversarial/service.py`)
 - Streamlit dashboard consuming agent-service mirror endpoints (`dashboards/streamlit_app.py`)
 - Task runners and bootstrap tooling (`justfile`, `Makefile`, `scripts/bootstrap.sh`)
 
@@ -57,7 +61,7 @@ SPECTER/
 ├── cmd/
 │   ├── api/            # Go API server entrypoint
 │   ├── collector/      # Go collection + pipeline processing
-│   └── worker/         # Worker scaffold
+│   └── worker/         # Worker runtime service (validated -> scored processing)
 ├── internal/
 │   ├── api/            # HTTP handlers and router
 │   ├── config/         # Env-based runtime config
@@ -110,7 +114,8 @@ Type `just` to see the full just command list.
 
 ## Quick start
 
-Operational reference: `docs/RUNNING_GUIDE.md`
+Operational runbook: `docs/RUNNING_GUIDE.md`
+Active task tracker: `TEAM_TASK_LIST.md`
 
 ### 1) Full bootstrap (recommended)
 
@@ -138,7 +143,7 @@ The current runtime storage implementation is SQLite-backed.
 
 ### 2) Start services
 
-Terminal A (Go stack):
+Single-command local orchestration:
 
 ```bash
 ./scripts/run_local.sh start
@@ -149,28 +154,8 @@ or
 make run-local
 ```
 
-Terminal B (agents service):
-
-```bash
-.venv/bin/uvicorn app.main:app --reload --port 8001 --app-dir agents
-```
-or
-
-```bash
-make run-agents
-```
-
-Terminal C (dashboard):
-
-```bash
-.venv/bin/streamlit run dashboards/streamlit_app.py
-```
-or
-```bash
-make run-dashboard
-```
-
-you can also use `just` instead of `make` at any point.
+This starts Go API + worker + collector + agents + dashboard with pid/log supervision.
+You can still run services individually (`make run-agents`, `make run-dashboard`) for debugging.
 
 Service orchestration helpers:
 
@@ -205,7 +190,7 @@ make ci-check
 just ci-check
 ```
 
-This runs the CI-equivalent local quality profile: Go tests, Python tests, compile checks, and shell script syntax checks.
+This runs the CI-equivalent local quality profile: Go tests, Python tests, contract tests (temporary Go API fixture), compile checks, and shell script syntax checks.
 
 ### 2.3) Offline fallback and bundle generation
 
@@ -263,7 +248,17 @@ Environment loading behavior differs by entrypoint:
 | `SHODAN_API_KEY` | Shodan provider key | empty |
 | `URLHAUS_API_KEY` | URLHaus provider key | empty |
 | `LOG_LEVEL` | Logging level | `INFO` |
-| `DEMO_MODE` | Demo mode toggle | `true` |
+| `DEMO_MODE` | Demo-mode toggle (no implicit provider seeds) | `false` |
+| `SHODAN_TARGETS` | Comma-separated Shodan collector targets | empty |
+| `ABUSEIPDB_TARGETS` | Comma-separated AbuseIPDB collector targets | empty |
+| `OTX_TARGETS` | Comma-separated OTX collector targets | empty |
+| `URLHAUS_HOSTS` | Comma-separated URLHaus host targets | empty |
+| `CRTSH_QUERY` | crt.sh query string | empty |
+
+Collector note:
+
+- Providers with empty target lists are skipped.
+- Providers requiring API keys are skipped if targets are set but keys are missing (collector logs a clear skip reason).
 
 ### Agents service variables
 
@@ -274,6 +269,11 @@ Environment loading behavior differs by entrypoint:
 | `AGENT_MAX_RETRIES` | Retries for agent HTTP calls | `2` |
 | `AGENT_MODEL` | Agent model label/config | `gpt-4.1-mini` |
 | `RED_AGENT_INTERVAL_SECONDS` | Red agent background interval | `30` |
+| `RED_MAX_RATIO` | Max allowed auto red ratio (`injections/real_events`) | `1.0` |
+| `MIN_REAL_EVENTS_BEFORE_AUTO_RED` | Auto red waits for baseline real telemetry | `5` |
+| `GO_SYNC_INTERVAL_SECONDS` | Agent mirror sync interval for Go real events | `15` |
+| `GO_SYNC_BATCH_LIMIT` | Max Go events fetched per sync cycle | `20` |
+| `GO_SYNC_ON_STARTUP` | Run first Go sync immediately on service start | `false` |
 | `ADVERSARIAL_DB_PATH` | Adversarial mirror sqlite path | `./specter_adversarial.db` |
 
 ### Dashboard variable
@@ -284,13 +284,8 @@ Environment loading behavior differs by entrypoint:
 
 Note about `DB_DSN`:
 
-- `.env.example` currently includes a Postgres-style DSN, but the implemented repository uses SQLite (`github.com/mattn/go-sqlite3`).
-- For local usage, set `DB_DSN` to the SQLite default shown above unless you intentionally know what you are doing.
-
-Note about `.env.example`:
-
-- Some keys are currently legacy or not consumed by active runtime code paths (`AGENT_SERVICE_PORT`, `LANGCHAIN_API_KEY`, `OPENAI_API_KEY`).
-- They are kept for future agent-model integrations and compatibility with earlier planning docs.
+- Runtime defaults are SQLite-backed (`internal/config/config.go` + `internal/storage` migration path).
+- For local usage, keep `DB_DSN=file:specter.db?_busy_timeout=5000&_journal_mode=WAL` unless you intentionally run another backend.
 
 ## API surfaces
 
@@ -358,8 +353,7 @@ just check
 
 - STIX export writes timestamped files to `artifacts/stix/`.
 - Report export writes timestamped files to `artifacts/reports/`.
-
-Current report exporter writes a plain text placeholder with `.pdf` extension (see `internal/output/report_exporter.go`).
+- Report export now writes a valid PDF structure with metrics, legend, and highlight sections.
 
 ## Testing and quality
 
@@ -387,25 +381,20 @@ just check
 
 ## Operational notes and caveats
 
-- `scripts/run_local.sh` runs API and worker in background, collector in foreground.
+- `scripts/run_local.sh` now orchestrates API/worker/collector/agents/dashboard with `start|stop|status|logs|restart`.
 - Network-dependent provider tests may be slow or occasionally skip/pass differently depending on upstream availability.
-- `cmd/worker/main.go` is currently a scaffold service.
-- `scripts/seed_demo_data.sh` is currently a scaffold.
+- Contract tests spin a temporary Go API process in `agents/tests/conftest.py`.
+- `scripts/seed_demo_data.sh`, `scripts/agent_smoke.sh`, and `scripts/rehearse_demo.sh` are live operational scripts.
 
-## Change audit snapshot (teammate contributions)
+## Documentation footprint (minimal)
 
-Snapshot scope: reflects repository state and commits inspected on 2026-03-19 (recent `main` history), and should be refreshed after major merges.
+Only keep and maintain these documents as source-of-truth:
 
-Detailed audit report: `docs/CHANGE_AUDIT_2026-03-19.md`
-Next sprint execution plan: `docs/NEXT_SPRINT_PLAN_2026-03-19.md`
+- `README.md` (overview, setup, API surface summary, troubleshooting)
+- `docs/RUNNING_GUIDE.md` (operational run sequence and demo/verification flows)
+- `TEAM_TASK_LIST.md` (current backlog and ownership)
 
-Recent repository history shows major implementation contributions in both Go and Python tracks:
-
-- Go core expansion: collector orchestration, API router/handlers, SQLite repository interface, STIX/report exporters, baseline scoring/validation.
-- Python expansion: adversarial mirror subsystem (`agents/app/adversarial/*`) plus mirror API wiring and dashboard integration.
-- Tooling/docs updates: `Makefile`, `justfile`, bootstrap script, and tasklist/status updates.
-
-For current truth state, treat `TEAM_TASK_LIST.md`, `docs/architecture.md`, and `docs/api.md` as synchronized references.
+All historical audit/sprint planning notes are intentionally removed to keep maintenance overhead low.
 
 ## Troubleshooting
 
@@ -438,6 +427,19 @@ Use environment kill switches before starting Streamlit:
 ```bash
 export DISABLE_AUTO_REFRESH=true
 export DISABLE_PRESENTATION_MODE=true
+```
+
+### Service startup reproducibility check
+
+Run this after fresh setup to verify documentation flow end-to-end:
+
+```bash
+./scripts/run_local.sh start
+./scripts/run_local.sh status
+./scripts/seed_demo_data.sh
+./scripts/agent_smoke.sh
+./scripts/rehearse_demo.sh
+make ci-check
 ```
 
 ### `make` command does not see `.env`

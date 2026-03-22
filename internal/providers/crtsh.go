@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -16,35 +17,73 @@ type crtShEntry struct {
 
 type CRTShProvider struct {
 	client *resty.Client
+	query  string
 }
 
-func NewCRTShProvider() *CRTShProvider {
+func NewCRTShProvider(query string) *CRTShProvider {
+	q := strings.TrimSpace(query)
 	return &CRTShProvider{
 		client: resty.New().SetTimeout(45 * time.Second).SetRetryCount(2),
+		query:  q,
 	}
 }
 
 func (p *CRTShProvider) Name() string { return "crt.sh" }
 
 func (p *CRTShProvider) Collect(ctx context.Context) ([]models.Threat, error) {
-	target := "%.example"
+	if p.query == "" {
+		return nil, nil
+	}
+
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = deadline
 	}
 
+	retryDelays := []time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond}
+	var resp *resty.Response
+	var err error
 	var result []crtShEntry
-	resp, err := p.client.R().
-		SetContext(ctx).
-		SetQueryParam("q", target).
-		SetQueryParam("output", "json").
-		SetResult(&result).
-		Get("https://crt.sh/")
-	if err != nil {
-		return nil, fmt.Errorf("crt.sh request failed: %w", err)
+
+	for attempt, delay := range retryDelays {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		result = nil
+		resp, err = p.client.R().
+			SetContext(ctx).
+			SetQueryParam("q", p.query).
+			SetQueryParam("output", "json").
+			SetResult(&result).
+			Get("https://crt.sh/")
+		if err != nil {
+			if attempt == len(retryDelays)-1 {
+				return nil, fmt.Errorf("crt.sh request failed: %w", err)
+			}
+			continue
+		}
+
+		if resp.StatusCode() == http.StatusTooManyRequests ||
+			resp.StatusCode() == http.StatusServiceUnavailable ||
+			resp.StatusCode() == http.StatusBadGateway ||
+			resp.StatusCode() == http.StatusGatewayTimeout {
+			if attempt == len(retryDelays)-1 {
+				return nil, nil
+			}
+			continue
+		}
+
+		if resp.IsError() {
+			return nil, fmt.Errorf("crt.sh returned error: %s", resp.Status())
+		}
+		break
 	}
-	if resp.IsError() {
-		return nil, fmt.Errorf("crt.sh returned error: %s", resp.Status())
-	}
+
+	target := p.query
 
 	seen := make(map[string]struct{})
 	threats := make([]models.Threat, 0, len(result))

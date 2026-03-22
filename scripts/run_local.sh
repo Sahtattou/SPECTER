@@ -23,6 +23,40 @@ DASHBOARD_PORT="${DASHBOARD_PORT:-8501}"
 
 mkdir -p "${RUN_DIR}" "${LOG_DIR}"
 
+stop_orphan_processes() {
+  local name="$1"
+  local pattern="$2"
+  local pids
+  pids="$(pgrep -f "$pattern" || true)"
+  if [[ -z "$pids" ]]; then
+    return
+  fi
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+
+    local proc_cwd=""
+    proc_cwd="$(readlink "/proc/${pid}/cwd" 2>/dev/null || true)"
+    if [[ "$proc_cwd" != "$ROOT_DIR" ]]; then
+      continue
+    fi
+
+    local tracked_pid=""
+    case "$name" in
+      api) [[ -f "$API_PID_FILE" ]] && tracked_pid="$(cat "$API_PID_FILE")" ;;
+      worker) [[ -f "$WORKER_PID_FILE" ]] && tracked_pid="$(cat "$WORKER_PID_FILE")" ;;
+      collector) [[ -f "$COLLECTOR_PID_FILE" ]] && tracked_pid="$(cat "$COLLECTOR_PID_FILE")" ;;
+    esac
+
+    if [[ -n "$tracked_pid" && "$pid" == "$tracked_pid" ]]; then
+      continue
+    fi
+
+    echo "[run-local] stopping orphan ${name} process (pid ${pid})"
+    kill "$pid" 2>/dev/null || true
+  done <<< "$pids"
+}
+
 is_running() {
   local pid_file="$1"
   if [[ ! -f "$pid_file" ]]; then
@@ -99,6 +133,7 @@ wait_for_http() {
 show_status() {
   local name="$1"
   local pid_file="$2"
+
   if is_running "$pid_file"; then
     echo "[run-local] ${name}: running (pid $(cat "$pid_file"))"
   else
@@ -107,6 +142,10 @@ show_status() {
 }
 
 start_all() {
+  stop_orphan_processes "api" "(/tmp/go-build|\.cache/go-build).*/(api)( |$)"
+  stop_orphan_processes "worker" "(/tmp/go-build|\.cache/go-build).*/(worker)( |$)"
+  stop_orphan_processes "collector" "(/tmp/go-build|\.cache/go-build).*/(collector)( |$)"
+
   start_service "api" "$API_PID_FILE" "$API_LOG" "go run ./cmd/api"
   start_service "worker" "$WORKER_PID_FILE" "$WORKER_LOG" "go run ./cmd/worker"
   start_service "collector" "$COLLECTOR_PID_FILE" "$COLLECTOR_LOG" "go run ./cmd/collector"

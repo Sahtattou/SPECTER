@@ -16,7 +16,7 @@ func TestURLhausProviderCollect(t *testing.T) {
 		t.Skip("Skipping URLhaus test: URLHAUS_API_KEY not set")
 	}
 
-	provider := NewURLHausProvider(apiKey)
+	provider := NewURLHausProvider(apiKey, []string{"example.com"})
 
 	records, err := provider.Collect(context.Background())
 

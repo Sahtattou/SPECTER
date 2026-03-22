@@ -11,6 +11,11 @@ class Settings(BaseModel):
     agent_model: str = Field(default="gpt-4.1-mini")
     red_agent_interval_seconds: int = Field(default=30)
     adversarial_db_path: str = Field(default="./specter_adversarial.db")
+    red_max_ratio: float = Field(default=1.0)
+    min_real_events_before_auto_red: int = Field(default=5)
+    go_sync_interval_seconds: int = Field(default=15)
+    go_sync_batch_limit: int = Field(default=20)
+    go_sync_on_startup: bool = Field(default=False)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,6 +32,14 @@ class Settings(BaseModel):
             adversarial_db_path=os.getenv(
                 "ADVERSARIAL_DB_PATH", "./specter_adversarial.db"
             ),
+            red_max_ratio=float(os.getenv("RED_MAX_RATIO", "1.0")),
+            min_real_events_before_auto_red=int(
+                os.getenv("MIN_REAL_EVENTS_BEFORE_AUTO_RED", "5")
+            ),
+            go_sync_interval_seconds=int(os.getenv("GO_SYNC_INTERVAL_SECONDS", "15")),
+            go_sync_batch_limit=int(os.getenv("GO_SYNC_BATCH_LIMIT", "20")),
+            go_sync_on_startup=os.getenv("GO_SYNC_ON_STARTUP", "false").lower()
+            in {"1", "true", "yes", "on"},
         )
 
 

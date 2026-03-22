@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/joho/godotenv"
@@ -16,11 +17,15 @@ func TestAbuseIPDBProviderCollect(t *testing.T) {
 		t.Skip("ABUSEIPDB_API_KEY not set. Skipping integration test.")
 	}
 
-	provider := NewAbuseIPDBProvider(apiKey)
+	provider := NewAbuseIPDBProvider(apiKey, []string{"8.8.8.8"})
 
 	records, err := provider.Collect(context.Background())
 
 	if err != nil {
+		lower := strings.ToLower(err.Error())
+		if strings.Contains(lower, "deadline") || strings.Contains(lower, "timeout") || strings.Contains(lower, "service unavailable") || strings.Contains(lower, "too many requests") {
+			t.Skipf("Skipping AbuseIPDB integration test due to transient upstream/network issue: %v", err)
+		}
 		t.Fatalf("Collect returned an error: %v", err)
 	}
 	if len(records) == 0 {

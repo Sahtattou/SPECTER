@@ -21,22 +21,26 @@ type urlhausResponse struct {
 type URLHausProvider struct {
 	apiKey string
 	client *resty.Client
+	hosts  []string
 }
 
-func NewURLHausProvider(apiKey string) *URLHausProvider {
+func NewURLHausProvider(apiKey string, hosts []string) *URLHausProvider {
 	return &URLHausProvider{
 		apiKey: apiKey,
 		client: resty.New().SetTimeout(15 * time.Second).SetRetryCount(2),
+		hosts:  hosts,
 	}
 }
 
 func (p *URLHausProvider) Name() string { return "urlhaus" }
 
 func (p *URLHausProvider) Collect(ctx context.Context) ([]models.Threat, error) {
-	seedHosts := []string{"example.com"}
-	out := make([]models.Threat, 0, len(seedHosts))
+	if len(p.hosts) == 0 {
+		return nil, nil
+	}
+	out := make([]models.Threat, 0, len(p.hosts))
 
-	for _, host := range seedHosts {
+	for _, host := range p.hosts {
 		var result urlhausResponse
 		resp, err := p.client.R().
 			SetContext(ctx).

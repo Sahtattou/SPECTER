@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 import random
 import threading
-import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from app.adversarial.models import IOCEnvelope, utc_now_iso
@@ -33,10 +32,12 @@ class RedAgent:
         storage: AdversarialStorage,
         *,
         interval_seconds: int = 30,
+        should_inject: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.queue_manager = queue_manager
         self.storage = storage
         self.interval_seconds = max(1, int(interval_seconds))
+        self.should_inject = should_inject
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -66,7 +67,8 @@ class RedAgent:
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
-                self.inject_now()
+                if self.should_inject is None or bool(self.should_inject()):
+                    self.inject_now()
             except Exception as exc:
                 logger.exception(
                     "red_agent_injection_cycle_failed", extra={"error": str(exc)}

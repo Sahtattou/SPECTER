@@ -35,7 +35,19 @@ run-collector:
   go run ./cmd/collector
 
 run-local:
-  ./scripts/run_local.sh
+  ./scripts/run_local.sh start
+
+stop-local:
+  ./scripts/run_local.sh stop
+
+status-local:
+  ./scripts/run_local.sh status
+
+logs-local:
+  ./scripts/run_local.sh logs
+
+restart-local:
+  ./scripts/run_local.sh restart
 
 build-api:
   mkdir -p bin
@@ -91,6 +103,9 @@ check: check-go test-py
 
 seed:
   ./scripts/seed_demo_data.sh
+
+agent-smoke:
+  ./scripts/agent_smoke.sh
 
 demo-rehearse:
   ./scripts/rehearse_demo.sh

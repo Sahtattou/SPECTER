@@ -17,24 +17,28 @@ type otxResponse struct {
 }
 
 type OTXProvider struct {
-	apiKey string
-	client *resty.Client
+	apiKey  string
+	client  *resty.Client
+	targets []string
 }
 
-func NewOTXProvider(apiKey string) *OTXProvider {
+func NewOTXProvider(apiKey string, targets []string) *OTXProvider {
 	return &OTXProvider{
-		apiKey: apiKey,
-		client: resty.New().SetTimeout(10 * time.Second),
+		apiKey:  apiKey,
+		client:  resty.New().SetTimeout(10 * time.Second),
+		targets: targets,
 	}
 }
 
 func (p *OTXProvider) Name() string { return "otx" }
 
 func (p *OTXProvider) Collect(ctx context.Context) ([]models.Threat, error) {
-	seeds := []string{"8.8.8.8", "example.com"}
-	out := make([]models.Threat, 0, len(seeds))
+	if len(p.targets) == 0 {
+		return nil, nil
+	}
+	out := make([]models.Threat, 0, len(p.targets))
 
-	for _, target := range seeds {
+	for _, target := range p.targets {
 		indicatorType := "domain"
 		if ip := net.ParseIP(target); ip != nil {
 			if ip.To4() != nil {

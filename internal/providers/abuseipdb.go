@@ -21,24 +21,28 @@ type abuseIPDBResponse struct {
 }
 
 type AbuseIPDBProvider struct {
-	apiKey string
-	client *resty.Client
+	apiKey  string
+	client  *resty.Client
+	targets []string
 }
 
-func NewAbuseIPDBProvider(apiKey string) *AbuseIPDBProvider {
+func NewAbuseIPDBProvider(apiKey string, targets []string) *AbuseIPDBProvider {
 	return &AbuseIPDBProvider{
-		apiKey: apiKey,
-		client: resty.New().SetTimeout(10 * time.Second),
+		apiKey:  apiKey,
+		client:  resty.New().SetTimeout(10 * time.Second),
+		targets: targets,
 	}
 }
 
 func (p *AbuseIPDBProvider) Name() string { return "abuseipdb" }
 
 func (p *AbuseIPDBProvider) Collect(ctx context.Context) ([]models.Threat, error) {
-	seedIPs := []string{"8.8.8.8"}
-	out := make([]models.Threat, 0, len(seedIPs))
+	if len(p.targets) == 0 {
+		return nil, nil
+	}
+	out := make([]models.Threat, 0, len(p.targets))
 
-	for _, ip := range seedIPs {
+	for _, ip := range p.targets {
 		var result abuseIPDBResponse
 		resp, err := p.client.R().
 			SetContext(ctx).

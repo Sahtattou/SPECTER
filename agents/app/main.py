@@ -28,6 +28,12 @@ def get_adversarial_service() -> AdversarialMirrorService:
     service = AdversarialMirrorService(
         db_path=settings.adversarial_db_path,
         red_agent_interval_seconds=settings.red_agent_interval_seconds,
+        red_max_ratio=settings.red_max_ratio,
+        min_real_events_before_auto_red=settings.min_real_events_before_auto_red,
+        go_sync_interval_seconds=settings.go_sync_interval_seconds,
+        go_sync_batch_limit=settings.go_sync_batch_limit,
+        go_sync_on_startup=settings.go_sync_on_startup,
+        go_client=get_client(),
     )
     service.start()
     return service

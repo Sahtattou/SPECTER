@@ -36,3 +36,23 @@ def test_manual_injections_are_caught(tmp_path) -> None:
         )
     finally:
         detector.stop()
+
+
+def test_red_agent_auto_loop_respects_should_inject_gate(tmp_path) -> None:
+    db_path = str(tmp_path / "adversarial_gate.db")
+    storage = AdversarialStorage(db_path=db_path)
+    queue = SharedQueueManager()
+
+    red = RedAgent(
+        queue_manager=queue,
+        storage=storage,
+        interval_seconds=1,
+        should_inject=lambda: False,
+    )
+    red.start()
+    try:
+        time.sleep(1.6)
+        injections = storage.get_injections(limit=5)
+        assert len(injections) == 0
+    finally:
+        red.stop()
