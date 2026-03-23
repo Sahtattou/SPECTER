@@ -258,6 +258,11 @@ Environment loading behavior differs by entrypoint:
 | `OTX_TARGETS` | Comma-separated OTX collector targets | empty |
 | `URLHAUS_HOSTS` | Comma-separated URLHaus host targets | empty |
 | `CRTSH_QUERY` | crt.sh query string | empty |
+| `ENABLE_SHODAN` | Hard disable Shodan provider even if targets/key exist | `true` |
+| `ENABLE_ABUSEIPDB` | Hard disable AbuseIPDB provider even if targets/key exist | `true` |
+| `ENABLE_OTX` | Hard disable OTX provider even if targets/key exist | `true` |
+| `ENABLE_URLHAUS` | Hard disable URLHaus provider even if targets/key exist | `true` |
+| `ENABLE_CRTSH` | Hard disable crt.sh provider even if query exists | `true` |
 | `CRTSH_DEDUPLICATE` | Add `deduplicate=Y` for crt.sh query | `true` |
 | `CRTSH_EXCLUDE_EXPIRED` | Add `exclude=expired` for crt.sh query | `true` |
 | `CRTSH_MAX_RESULTS` | Max unique domains accepted per crt.sh collection run (`0` = no cap) | `1000` |
@@ -266,6 +271,18 @@ Collector note:
 
 - Providers with empty target lists are skipped.
 - Providers requiring API keys are skipped if targets are set but keys are missing (collector logs a clear skip reason).
+- Providers can be explicitly disabled regardless of target lists via `ENABLE_*` flags.
+
+Rate-limit and plan-limit note:
+
+- AbuseIPDB `429 Too Many Requests` now causes temporary provider cooldown instead of immediate retry each tick.
+- Shodan plan/auth errors (e.g. `Requires membership or higher`) now trigger extended suppression (24h) to reduce noise.
+- You can immediately mute noisy providers with:
+
+```bash
+ENABLE_ABUSEIPDB=false
+ENABLE_SHODAN=false
+```
 
 ### Agents service variables
 
@@ -331,6 +348,15 @@ Defined in `agents/app/main.py`:
 - `GET /mirror/events`
 - `GET /mirror/injections`
 - `GET /mirror/metrics`
+- `GET /mirror/dashboard` (atomic snapshot for metrics + feed + injections)
+- `POST /mirror/exports/stix` (STIX generated from same mirror snapshot)
+- `POST /mirror/exports/report` (report/PDF generated from same mirror snapshot)
+
+Dashboard sync note:
+
+- The React/Tauri dashboard now uses `GET /mirror/dashboard` so Pipeline Overview and Live IOC Feed are rendered from one agents-side snapshot (`snapshot_generated_at`) to avoid cross-endpoint drift.
+- STIX/report exports now use this same mirror snapshot contract and embed snapshot metadata (`snapshot_generated_at`, derived snapshot id basis) for anti-drift traceability.
+- In snapshot metrics, `total_events` is pipeline-aligned (from Go pipeline metrics when reachable), while `mirror_total_events` preserves the local mirror event count.
 - `POST /agents/blue/analyze`
 - `POST /agents/red/inject`
 - `POST /agents/run`

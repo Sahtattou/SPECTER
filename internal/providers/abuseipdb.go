@@ -3,6 +3,8 @@ package providers
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Sahtattou/SPECTER/pkg/models"
@@ -53,10 +55,28 @@ func (p *AbuseIPDBProvider) Collect(ctx context.Context) ([]models.Threat, error
 			SetResult(&result).
 			Get("https://api.abuseipdb.com/api/v2/check")
 		if err != nil {
-			return nil, fmt.Errorf("abuseipdb request failed for %s: %w", ip, err)
+			return nil, NewProviderError(
+				ErrorKindTransient,
+				fmt.Errorf("abuseipdb request failed for %s: %w", ip, err),
+			)
 		}
 		if resp.IsError() {
-			return nil, fmt.Errorf("abuseipdb returned error for %s: %s", ip, resp.Status())
+			kind := ErrorKindUnknown
+			retryAfter := time.Duration(0)
+			switch resp.StatusCode() {
+			case http.StatusTooManyRequests:
+				kind = ErrorKindRateLimited
+				if header := resp.Header().Get("Retry-After"); header != "" {
+					if seconds, parseErr := strconv.Atoi(header); parseErr == nil && seconds > 0 {
+						retryAfter = time.Duration(seconds) * time.Second
+					}
+				}
+			case http.StatusUnauthorized, http.StatusForbidden:
+				kind = ErrorKindPermanentAuth
+			default:
+				kind = ErrorKindTransient
+			}
+			return nil, NewProviderErrorWithRetry(kind, fmt.Errorf("abuseipdb returned error for %s: %s", ip, resp.Status()), retryAfter)
 		}
 
 		out = append(out, models.Threat{

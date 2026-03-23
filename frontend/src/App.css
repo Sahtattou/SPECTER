@@ -174,6 +174,13 @@
   display: inline-block;
 }
 
+.metric-subvalue {
+  display: block;
+  margin-top: 0.25rem;
+  color: #8aaebf;
+  font-size: 0.72rem;
+}
+
 .table-scroll {
   margin-top: 0.75rem;
   overflow: auto;

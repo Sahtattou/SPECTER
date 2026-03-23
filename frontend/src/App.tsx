@@ -8,7 +8,7 @@ import './App.css'
 function App() {
   const {
     mirrorMetrics,
-    goMetrics,
+    snapshotGeneratedAt,
     events,
     injections,
     loading,
@@ -42,7 +42,7 @@ function App() {
           onExportReport={runReportExport}
           loading={loading}
         />
-        <MetricsPanel mirrorMetrics={mirrorMetrics} goMetrics={goMetrics} />
+        <MetricsPanel mirrorMetrics={mirrorMetrics} snapshotGeneratedAt={snapshotGeneratedAt} />
       </section>
 
       <section className="grid-bottom">

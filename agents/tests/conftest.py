@@ -72,3 +72,64 @@ def go_api_base_url(
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+@pytest.fixture(scope="session")
+def agent_api_base_url(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[str, None, None]:
+    port = _free_port()
+    db_dir = tmp_path_factory.mktemp("agent_api_contract")
+    db_path = db_dir / "adversarial.db"
+
+    env = os.environ.copy()
+    env["ADVERSARIAL_DB_PATH"] = str(db_path)
+    env["AGENT_ALLOWED_ORIGINS"] = "http://localhost:5173,http://127.0.0.1:5173"
+
+    proc = subprocess.Popen(
+        [
+            str(REPO_ROOT / ".venv" / "bin" / "python"),
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--port",
+            str(port),
+            "--app-dir",
+            "agents",
+        ],
+        cwd=str(REPO_ROOT),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    base_url = f"http://127.0.0.1:{port}"
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            out, err = proc.communicate(timeout=2)
+            raise RuntimeError(
+                f"agents api exited early\nstdout:\n{out}\nstderr:\n{err}"
+            )
+        try:
+            resp = requests.get(f"{base_url}/health", timeout=1)
+            if resp.status_code == 200:
+                break
+        except requests.RequestException:
+            time.sleep(0.25)
+    else:
+        proc.terminate()
+        out, err = proc.communicate(timeout=3)
+        raise RuntimeError(
+            f"agents api did not become healthy\nstdout:\n{out}\nstderr:\n{err}"
+        )
+
+    try:
+        yield base_url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()

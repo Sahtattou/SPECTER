@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Protocol, cast
 
 from app.adversarial.blue_agent import BlueAgent
 from app.adversarial.detector import Detector
@@ -135,6 +136,49 @@ class AdversarialMirrorService:
 
     def get_injection_activity(self, limit: int = 100) -> List[Dict[str, Any]]:
         return self.storage.get_injections(limit=limit)
+
+    def get_dashboard_snapshot(
+        self, *, event_limit: int = 100, injection_limit: int = 100
+    ) -> Dict[str, Any]:
+        snapshot_time = datetime.now(timezone.utc).isoformat()
+        metrics = self.get_metrics()
+
+        mirror_total_events = int(metrics.get("total_events", 0))
+        metrics["mirror_total_events"] = mirror_total_events
+        metrics["pipeline_total_events"] = mirror_total_events
+        pipeline_run_total = self.storage.get_pipeline_run_total()
+        metrics["pipeline_run_total"] = pipeline_run_total
+
+        if self.go_client is not None and hasattr(
+            self.go_client, "get_pipeline_metrics"
+        ):
+            try:
+                go_metrics_client = cast(GoAPIClient, self.go_client)
+                pipeline_metrics = go_metrics_client.get_pipeline_metrics()
+                pipeline_total = int(
+                    pipeline_metrics.get("total_events", mirror_total_events)
+                )
+                metrics["pipeline_total_events"] = pipeline_total
+                metrics["total_events"] = pipeline_total
+            except Exception as exc:
+                logger.warning(
+                    "go_pipeline_metrics_sync_failed",
+                    extra={"error": str(exc)},
+                )
+
+        metrics["total_events"] = max(
+            int(metrics.get("total_events", 0)),
+            int(metrics.get("pipeline_run_total", 0)),
+        )
+
+        events = self.get_events(limit=event_limit)
+        injections = self.get_injection_activity(limit=injection_limit)
+        return {
+            "snapshot_generated_at": snapshot_time,
+            "metrics": metrics,
+            "events": events,
+            "injections": injections,
+        }
 
     def _should_allow_auto_red_injection(self) -> bool:
         metrics = self.storage.get_metrics()

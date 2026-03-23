@@ -85,3 +85,26 @@ def test_go_manual_injection_contract(go_api_base_url: str) -> None:
     assert body.get("ioc_type") == payload["ioc_type"]
     assert isinstance(body.get("stage"), str)
     assert isinstance(body.get("is_synthetic"), bool)
+
+
+def test_agent_dashboard_snapshot_contract(agent_api_base_url: str) -> None:
+    resp = requests.get(f"{agent_api_base_url}/mirror/dashboard?limit=10", timeout=10)
+    resp.raise_for_status()
+    body = resp.json()
+
+    assert isinstance(body, dict)
+    assert isinstance(body.get("snapshot_generated_at"), str)
+    assert isinstance(body.get("metrics"), dict)
+    assert isinstance(body.get("events"), list)
+    assert isinstance(body.get("injections"), list)
+
+    metrics = body["metrics"]
+    for key in (
+        "total_events",
+        "validated_events",
+        "quarantined_events",
+        "total_injections",
+        "caught_injections",
+    ):
+        assert key in metrics
+        assert isinstance(metrics[key], int)

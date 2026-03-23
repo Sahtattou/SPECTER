@@ -28,6 +28,11 @@ type Config struct {
 	OTXTargets          []string
 	URLHausHosts        []string
 	CRTShQuery          string
+	EnableShodan        bool
+	EnableAbuseIPDB     bool
+	EnableOTX           bool
+	EnableURLHaus       bool
+	EnableCRTSh         bool
 	CRTShDeduplicate    bool
 	CRTShExcludeExpired bool
 	CRTShMaxResults     int
@@ -55,6 +60,11 @@ func Load() Config {
 		OTXTargets:                envCSV("OTX_TARGETS"),
 		URLHausHosts:              envCSV("URLHAUS_HOSTS"),
 		CRTShQuery:                strings.TrimSpace(os.Getenv("CRTSH_QUERY")),
+		EnableShodan:              envBool("ENABLE_SHODAN", true),
+		EnableAbuseIPDB:           envBool("ENABLE_ABUSEIPDB", true),
+		EnableOTX:                 envBool("ENABLE_OTX", true),
+		EnableURLHaus:             envBool("ENABLE_URLHAUS", true),
+		EnableCRTSh:               envBool("ENABLE_CRTSH", true),
 		CRTShDeduplicate:          envBool("CRTSH_DEDUPLICATE", true),
 		CRTShExcludeExpired:       envBool("CRTSH_EXCLUDE_EXPIRED", true),
 		CRTShMaxResults:           envInt("CRTSH_MAX_RESULTS", 1000),

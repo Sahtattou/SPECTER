@@ -1,6 +1,7 @@
 import type {
   ExportResponse,
   GoPipelineMetrics,
+  MirrorDashboardSnapshot,
   MirrorEventsResponse,
   MirrorInjectionsResponse,
   MirrorMetrics,
@@ -49,20 +50,12 @@ async function postAgent<T>(path: string, payload: Record<string, unknown> = {})
   return parseJson<T>(res, `POST ${path}`)
 }
 
-async function postGo<T>(path: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(`${goBase}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-  return parseJson<T>(res, `POST ${path}`)
-}
-
 export async function getMirrorMetrics(): Promise<MirrorMetrics> {
   return getAgent<MirrorMetrics>('/mirror/metrics')
+}
+
+export async function getMirrorDashboard(limit = 50): Promise<MirrorDashboardSnapshot> {
+  return getAgent<MirrorDashboardSnapshot>(`/mirror/dashboard?limit=${encodeURIComponent(String(limit))}`)
 }
 
 export async function getGoPipelineMetrics(): Promise<GoPipelineMetrics> {
@@ -83,11 +76,11 @@ export async function triggerInjection(attackType: string | null): Promise<Trigg
 }
 
 export async function exportStix(): Promise<ExportResponse> {
-  return postGo<ExportResponse>('/api/v1/exports/stix')
+  return postAgent<ExportResponse>('/mirror/exports/stix')
 }
 
 export async function exportReport(): Promise<ExportResponse> {
-  return postGo<ExportResponse>('/api/v1/exports/report')
+  return postAgent<ExportResponse>('/mirror/exports/report')
 }
 
 export function getConfiguredApiBases(): { agentApiBase: string; goApiBase: string } {

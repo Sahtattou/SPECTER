@@ -10,9 +10,11 @@ from app.chains.blue_analyst_chain import run_blue_analyst_chain
 from app.chains.red_injector_chain import run_red_injector_chain
 from app.clients.go_api_client import GoAPIClient
 from app.config import get_settings
+from app.exports import export_snapshot_report, export_snapshot_stix
 from app.schemas import (
     BlueAnalysisRequest,
     BlueAnalysisResponse,
+    MirrorDashboardSnapshot,
     RedInjectionRequest,
     RedInjectionResponse,
     RunAgentRequest,
@@ -108,6 +110,50 @@ def mirror_injections(limit: int = 100) -> dict:
 @app.get("/mirror/metrics")
 def mirror_metrics() -> dict:
     return get_adversarial_service().get_metrics()
+
+
+@app.get("/mirror/dashboard", response_model=MirrorDashboardSnapshot)
+def mirror_dashboard_snapshot(limit: int = 100) -> MirrorDashboardSnapshot:
+    safe_limit = max(1, min(500, int(limit)))
+    snapshot = get_adversarial_service().get_dashboard_snapshot(
+        event_limit=safe_limit,
+        injection_limit=safe_limit,
+    )
+    return MirrorDashboardSnapshot(**snapshot)
+
+
+@app.post("/mirror/exports/stix")
+def mirror_export_stix(limit: int = 500) -> dict:
+    safe_limit = max(1, min(2000, int(limit)))
+    snapshot = get_adversarial_service().get_dashboard_snapshot(
+        event_limit=safe_limit,
+        injection_limit=safe_limit,
+    )
+    path, count = export_snapshot_stix(snapshot)
+    return {
+        "submitted": True,
+        "message": "mirror stix export generated",
+        "records_count": count,
+        "artifact_path": path,
+        "snapshot_generated_at": snapshot["snapshot_generated_at"],
+    }
+
+
+@app.post("/mirror/exports/report")
+def mirror_export_report(limit: int = 500) -> dict:
+    safe_limit = max(1, min(2000, int(limit)))
+    snapshot = get_adversarial_service().get_dashboard_snapshot(
+        event_limit=safe_limit,
+        injection_limit=safe_limit,
+    )
+    path, count = export_snapshot_report(snapshot)
+    return {
+        "submitted": True,
+        "message": "mirror report export generated",
+        "records_count": count,
+        "artifact_path": path,
+        "snapshot_generated_at": snapshot["snapshot_generated_at"],
+    }
 
 
 @app.post("/agents/blue/analyze", response_model=BlueAnalysisResponse)

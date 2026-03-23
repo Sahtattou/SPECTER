@@ -19,6 +19,9 @@ export interface MirrorMetrics {
   source_freshness_age_seconds?: Record<string, number>
   metrics_generated_at?: string
   queue_size?: number
+  mirror_total_events?: number
+  pipeline_total_events?: number
+  pipeline_run_total?: number
 }
 
 export interface GoPipelineMetrics {
@@ -74,6 +77,13 @@ export interface InjectionActivity {
 }
 
 export interface MirrorInjectionsResponse {
+  injections: InjectionActivity[]
+}
+
+export interface MirrorDashboardSnapshot {
+  snapshot_generated_at: string
+  metrics: MirrorMetrics
+  events: MirrorEvent[]
   injections: InjectionActivity[]
 }
 

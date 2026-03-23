@@ -4,14 +4,10 @@ import {
   exportReport,
   exportStix,
   getConfiguredApiBases,
-  getGoPipelineMetrics,
-  getMirrorEvents,
-  getMirrorInjections,
-  getMirrorMetrics,
+  getMirrorDashboard,
   triggerInjection,
 } from '../api/client'
 import type {
-  GoPipelineMetrics,
   MirrorEvent,
   MirrorMetrics,
   InjectionActivity,
@@ -21,7 +17,7 @@ const DEFAULT_REFRESH_SECONDS = 10
 
 export interface DashboardDataState {
   mirrorMetrics: MirrorMetrics | null
-  goMetrics: GoPipelineMetrics | null
+  snapshotGeneratedAt: string | null
   events: MirrorEvent[]
   injections: InjectionActivity[]
   loading: boolean
@@ -35,7 +31,7 @@ export interface DashboardDataState {
 
 export function useDashboardData(autoRefreshSeconds = DEFAULT_REFRESH_SECONDS): DashboardDataState {
   const [mirrorMetrics, setMirrorMetrics] = useState<MirrorMetrics | null>(null)
-  const [goMetrics, setGoMetrics] = useState<GoPipelineMetrics | null>(null)
+  const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null)
   const [events, setEvents] = useState<MirrorEvent[]>([])
   const [injections, setInjections] = useState<InjectionActivity[]>([])
   const [loading, setLoading] = useState<boolean>(true)
@@ -45,16 +41,11 @@ export function useDashboardData(autoRefreshSeconds = DEFAULT_REFRESH_SECONDS): 
     setLoading(true)
     setError(null)
     try {
-      const [mirror, go, eventsRes, injectionsRes] = await Promise.all([
-        getMirrorMetrics(),
-        getGoPipelineMetrics(),
-        getMirrorEvents(50),
-        getMirrorInjections(50),
-      ])
-      setMirrorMetrics(mirror)
-      setGoMetrics(go)
-      setEvents(eventsRes.events)
-      setInjections(injectionsRes.injections)
+      const snapshot = await getMirrorDashboard(50)
+      setMirrorMetrics(snapshot.metrics)
+      setEvents(snapshot.events)
+      setInjections(snapshot.injections)
+      setSnapshotGeneratedAt(snapshot.snapshot_generated_at)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load dashboard data.'
       setError(message)
@@ -101,7 +92,7 @@ export function useDashboardData(autoRefreshSeconds = DEFAULT_REFRESH_SECONDS): 
 
   return {
     mirrorMetrics,
-    goMetrics,
+    snapshotGeneratedAt,
     events,
     injections,
     loading,

@@ -45,3 +45,10 @@ class RunAgentRequest(BaseModel):
 class RunAgentResponse(BaseModel):
     agent_name: str
     result: Dict[str, Any]
+
+
+class MirrorDashboardSnapshot(BaseModel):
+    snapshot_generated_at: str
+    metrics: Dict[str, Any]
+    events: List[Dict[str, Any]]
+    injections: List[Dict[str, Any]]

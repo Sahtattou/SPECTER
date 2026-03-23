@@ -45,3 +45,31 @@ func TestLoadDefaultsForDemoMode(t *testing.T) {
 		t.Fatalf("expected no implicit CRTShQuery in demo mode")
 	}
 }
+
+func TestLoadProviderEnableFlagsDefaultTrue(t *testing.T) {
+	t.Setenv("ENABLE_SHODAN", "")
+	t.Setenv("ENABLE_ABUSEIPDB", "")
+	t.Setenv("ENABLE_OTX", "")
+	t.Setenv("ENABLE_URLHAUS", "")
+	t.Setenv("ENABLE_CRTSH", "")
+
+	cfg := Load()
+
+	if !cfg.EnableShodan || !cfg.EnableAbuseIPDB || !cfg.EnableOTX || !cfg.EnableURLHaus || !cfg.EnableCRTSh {
+		t.Fatalf("expected all provider enable flags to default true")
+	}
+}
+
+func TestLoadProviderEnableFlagsFromEnv(t *testing.T) {
+	t.Setenv("ENABLE_SHODAN", "false")
+	t.Setenv("ENABLE_ABUSEIPDB", "false")
+	t.Setenv("ENABLE_OTX", "false")
+	t.Setenv("ENABLE_URLHAUS", "false")
+	t.Setenv("ENABLE_CRTSH", "false")
+
+	cfg := Load()
+
+	if cfg.EnableShodan || cfg.EnableAbuseIPDB || cfg.EnableOTX || cfg.EnableURLHaus || cfg.EnableCRTSh {
+		t.Fatalf("expected all provider enable flags to load false from env")
+	}
+}

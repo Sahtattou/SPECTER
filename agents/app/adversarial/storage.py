@@ -218,6 +218,11 @@ class AdversarialStorage:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_pipeline_run_total(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM pipeline_runs").fetchone()
+        return int(row["c"] if row is not None and row["c"] is not None else 0)
+
     def get_metrics(self) -> Dict[str, Any]:
         with self._connect() as conn:
             total = conn.execute("SELECT COUNT(*) AS c FROM mirror_events").fetchone()[
