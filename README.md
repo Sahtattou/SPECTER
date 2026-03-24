@@ -118,6 +118,7 @@ Type `just` to see the full just command list.
 
 Operational runbook: `docs/RUNNING_GUIDE.md`
 Active task tracker: `TEAM_TASK_LIST.md`
+Comprehensive technical reference: `PROJECT_DOCUMENTATION.md`
 
 ### 1) Full bootstrap (recommended)
 
@@ -446,6 +447,8 @@ Only keep and maintain these documents as source-of-truth:
 - `README.md` (overview, setup, API surface summary, troubleshooting)
 - `docs/RUNNING_GUIDE.md` (operational run sequence and demo/verification flows)
 - `TEAM_TASK_LIST.md` (current backlog and ownership)
+
+`PROJECT_DOCUMENTATION.md` is a comprehensive reference document generated for full-project onboarding and handoff. It may include broader explanatory content than the minimal maintained source-of-truth set above.
 
 All historical audit/sprint planning notes are intentionally removed to keep maintenance overhead low.
 

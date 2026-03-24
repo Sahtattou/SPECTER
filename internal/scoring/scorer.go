@@ -25,9 +25,7 @@ var highRiskSecondaryPorts = map[int]struct{}{
 }
 
 func Score(rec models.ThreatRecord) models.ThreatRecord {
-	if rec.PipelineStage == "quarantined" {
-		return rec
-	}
+	poisonDetected := (rec.PoisonDetected != nil && *rec.PoisonDetected) || rec.PipelineStage == "quarantined"
 
 	score := 20.0
 	score += float64(rec.CorroborationCount) * bonusCorroborationMultiplier
@@ -36,7 +34,7 @@ func Score(rec models.ThreatRecord) models.ThreatRecord {
 		score -= 40
 	}
 
-	if rec.PoisonDetected != nil && *rec.PoisonDetected {
+	if poisonDetected {
 		score -= penaltyPoisonDetected
 	}
 
@@ -72,7 +70,7 @@ func Score(rec models.ThreatRecord) models.ThreatRecord {
 	rec.CompositeScore = &score
 	rec.ThreatLevel = mapLevel(score)
 	rec.DaysToAttack = mapDays(score)
-	if rec.PoisonDetected != nil && *rec.PoisonDetected {
+	if poisonDetected {
 		rec.PipelineStage = "quarantined"
 	} else {
 		rec.PipelineStage = "scored"

@@ -16,11 +16,18 @@ class BlueAgent:
         self.source_clients = source_clients
 
     def enrich(self, envelope: IOCEnvelope) -> IOCEnvelope:
-        corroboration = max(1, int(envelope.corroboration_count or 1))
+        corroboration = max(0, int(envelope.corroboration_count or 0))
 
         if envelope.ioc_type == "url":
             host = self._extract_host(envelope.raw_value)
             if host:
+                evidence = (
+                    envelope.raw_evidence
+                    if isinstance(envelope.raw_evidence, dict)
+                    else {}
+                )
+                evidence.setdefault("original_raw_value", envelope.raw_value)
+                envelope.raw_evidence = evidence
                 envelope.ioc_type = "domain"
                 envelope.raw_value = host
 
@@ -59,6 +66,7 @@ class BlueAgent:
                 age_days = self._extract_domain_age_days(whois_data)
                 if age_days is not None:
                     envelope.domain_age_days = age_days
+                    corroboration += 1
                 evidence["whois"] = whois_data
 
             if self._should_query(envelope.source_name, "urlhaus"):
@@ -166,7 +174,7 @@ class BlueAgent:
 
     def _safe_call(
         self, source_name: str, value: str, *, sleep_after: float = 0.0
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
         client = self.source_clients.get(source_name)
         if client is None:
             return None
@@ -175,9 +183,9 @@ class BlueAgent:
             result = client(value)
             if sleep_after > 0:
                 time.sleep(sleep_after)
-            if isinstance(result, dict):
+            if isinstance(result, (dict, list)):
                 return result
-            return None
+            return {"raw": str(result)}
         except Exception as exc:
             logger.warning(
                 "blue_agent_api_failure",

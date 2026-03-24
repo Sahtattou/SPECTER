@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 class RecentEventsClient(Protocol):
     def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]: ...
 
+    def get_pipeline_metrics(self) -> Dict[str, Any]: ...
+
 
 class AdversarialMirrorService:
     def __init__(
@@ -77,10 +79,35 @@ class AdversarialMirrorService:
     def ingest_real_ioc(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         envelope = IOCEnvelope.from_dict(payload)
         envelope.is_synthetic = False
-        envelope.poison_attack_type = None
-        envelope.poison_detected = None
-        envelope.detection_rule = None
+        upstream_pipeline_stage = str(envelope.pipeline_stage or "").strip().lower()
+        envelope.poison_attack_type = (
+            None
+            if payload.get("poison_attack_type") in (None, "")
+            else str(payload.get("poison_attack_type"))
+        )
+        if "poison_detected" in payload:
+            poison = payload.get("poison_detected")
+            envelope.poison_detected = self._coerce_optional_bool(poison)
+        else:
+            envelope.poison_detected = None
+        if "detection_rule" in payload:
+            detection_rule = payload.get("detection_rule")
+            envelope.detection_rule = (
+                None if detection_rule in (None, "") else str(detection_rule)
+            )
+        else:
+            envelope.detection_rule = None
         enriched = self.blue_agent.enrich(envelope)
+        if enriched.composite_score is None and envelope.composite_score is not None:
+            enriched.composite_score = envelope.composite_score
+        if not enriched.threat_level and envelope.threat_level:
+            enriched.threat_level = envelope.threat_level
+        if not enriched.days_to_attack_estimate and envelope.days_to_attack_estimate:
+            enriched.days_to_attack_estimate = envelope.days_to_attack_estimate
+        if not enriched.score_breakdown and envelope.score_breakdown:
+            enriched.score_breakdown = envelope.score_breakdown
+        if upstream_pipeline_stage in {"validated", "quarantined", "scored"}:
+            enriched.pipeline_stage = upstream_pipeline_stage
         self.storage.save_event(enriched)
         self.storage.record_pipeline_run_values([enriched])
         self.queue.enqueue(enriched)
@@ -279,8 +306,15 @@ class AdversarialMirrorService:
                 "corroboration_count": event.get("corroboration_count") or 1,
                 "open_ports": event.get("open_ports") or [],
                 "asn": event.get("asn"),
-                "pipeline_stage": "raw_ingest",
+                "pipeline_stage": event.get("pipeline_stage") or "raw_ingest",
                 "is_synthetic": False,
+                "composite_score": event.get("composite_score"),
+                "threat_level": event.get("threat_level"),
+                "days_to_attack_estimate": event.get("days_to_attack")
+                or event.get("days_to_attack_estimate"),
+                "score_breakdown": event.get("score_breakdown") or {},
+                "poison_detected": event.get("poison_detected"),
+                "detection_rule": event.get("detection_rule"),
             }
             self.ingest_real_ioc(payload)
             self._seen_real_event_ids.add(event_id)
@@ -296,3 +330,21 @@ class AdversarialMirrorService:
                 collected_at = str(event.get("collected_at") or "").strip()
                 if collected_at:
                     self._seen_real_event_collected_at[ioc_uuid] = collected_at
+
+    @staticmethod
+    def _coerce_optional_bool(value: Any) -> Optional[bool]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "none", "null"}:
+                return None
+            if normalized in {"true", "1", "yes", "y"}:
+                return True
+            if normalized in {"false", "0", "no", "n"}:
+                return False
+        return bool(value)

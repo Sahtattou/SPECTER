@@ -12,8 +12,11 @@ func TestScore_QuarantinedRemainsUnchanged(t *testing.T) {
 	if out.PipelineStage != "quarantined" {
 		t.Fatalf("expected quarantined stage, got %s", out.PipelineStage)
 	}
-	if out.CompositeScore != nil {
-		t.Fatalf("expected nil score for already quarantined record")
+	if out.CompositeScore == nil {
+		t.Fatalf("expected non-nil score for quarantined record")
+	}
+	if *out.CompositeScore != 0 {
+		t.Fatalf("expected clamped score 0 for quarantined record, got %f", *out.CompositeScore)
 	}
 }
 

@@ -1,0 +1,399 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{titlesec}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!60!black,
+    pdftitle={SPECTER OTIC Technical Report},
+    pdfauthor={Cyber Horizon 2.0 Team}
+}
+
+\lstdefinestyle{bashstyle}{
+    language=bash,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!60!black},
+    commentstyle=\color{gray!70!black},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    framesep=6pt
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+
+\title{\textbf{SPECTER}\\[2mm]
+\Large Operational Threat Intelligence Prototype\\
+\large Technical Report for the Open Threat Intelligence Challenge (OTIC)}
+\author{Cyber Horizon 2.0 Team}
+\date{\today}
+
+\begin{document}
+\maketitle
+\onehalfspacing
+
+\begin{abstract}
+This report presents \textbf{SPECTER}, a functional Threat Intelligence (TI) prototype designed to transform raw Open-Source Intelligence (OSINT) into operational, traceable, and SOC-consumable outputs. The system implements an end-to-end pipeline covering collection, normalization, noise reduction, poisoning detection, scoring, and reporting. SPECTER combines a Go processing core, a Python adversarial mirror service, and a React/Tauri dashboard to support real analytical workflows rather than conceptual-only demonstrations. The prototype outputs both API-consumable intelligence and structured export artifacts (STIX and PDF), with reproducible scripts for setup, testing, and demo rehearsal.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Challenge Context and Motivation}
+
+\subsection{Scope and Topic Alignment}
+The OTIC challenge focuses on operational TI pipelines based on public OSINT. SPECTER directly addresses this scope by implementing:
+\begin{itemize}[leftmargin=1.5em]
+    \item multi-source public OSINT collection,
+    \item source traceability and evidence preservation,
+    \item enrichment and deterministic scoring,
+    \item noise and inconsistency reduction,
+    \item basic poisoning detection,
+    \item SOC-oriented reporting through APIs, dashboard views, and export artifacts.
+\end{itemize}
+
+\subsection{Problem Statement}
+Public OSINT is abundant but often operationally unusable in SOC contexts due to fragmented collection, inconsistent quality, and manual transformation overhead. SPECTER addresses this by delivering an executable pipeline that converts public indicators into structured intelligence with clear lineage and analyst-facing outputs.
+
+\subsection{Goal of the Prototype}
+The project goal is to prove that raw OSINT can be processed into \textbf{actionable, traceable, and usable} intelligence through a working prototype, not a conceptual proposal.
+
+\section{System Overview}
+
+SPECTER uses a modular architecture:
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{Go core}: collection, normalization, validation, scoring, persistence, exports, API.
+    \item \textbf{Python Agents (FastAPI)}: adversarial mirror service, red/blue agent workflows, mirror snapshot exports.
+    \item \textbf{React + Tauri dashboard}: SOC-oriented desktop visualization and controls.
+    \item \textbf{SQLite}: persistent storage for both core pipeline and adversarial mirror workloads.
+\end{itemize}
+
+\subsection{High-Level Processing Flow}
+\begin{enumerate}[leftmargin=1.5em]
+    \item Collect OSINT from providers.
+    \item Normalize records and assign stable identity.
+    \item Reduce noise through deduplication and validation.
+    \item Score intelligence signals and classify threat level.
+    \item Persist and expose through APIs.
+    \item Mirror events into adversarial service for red/blue evaluation.
+    \item Produce STIX and PDF reports aligned with dashboard-visible state.
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \IfFileExists{OSINT Provider Integration-2026-03-24-102904.png}{%
+        \includegraphics[width=\linewidth]{OSINT Provider Integration-2026-03-24-102904.png}
+    }{%
+        \fbox{\parbox{0.92\linewidth}{\centering
+        Missing image file:\\
+        \texttt{OSINT Provider Integration-2026-03-24-102904.png}\\[1mm]
+        Place this file in the same directory as this \texttt{.tex} file to render the architecture figure.
+        }}
+    }
+    \caption{SPECTER System Architecture}
+    \label{fig:specter-system-architecture}
+\end{figure}
+
+\section{Architecture and Components}
+
+\subsection{Repository Structure (Core Areas)}
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{cmd/}: Go service entrypoints (API, collector, worker)
+    \item \texttt{internal/}: API handlers, ingest logic, providers, scoring, validation, storage, exporters
+    \item \texttt{pkg/models/}: shared Go data models
+    \item \texttt{agents/app/}: FastAPI agents service and adversarial mirror logic
+    \item \texttt{frontend/}: React + TypeScript + Tauri desktop app
+    \item \texttt{scripts/}: bootstrap, orchestration, smoke, rehearsal, artifact bundling
+\end{itemize}
+
+\subsection{Go Services}
+
+\subsubsection*{Collector (\texttt{cmd/collector/main.go})}
+Responsibilities:
+\begin{itemize}[leftmargin=1.5em]
+    \item concurrent provider collection,
+    \item normalization (\texttt{internal/ingest/normalizer.go}),
+    \item run-scope dedupe (\texttt{internal/ingest/dedupe.go}),
+    \item validation (\texttt{internal/validation/detector.go}),
+    \item scoring (\texttt{internal/scoring/scorer.go}),
+    \item persistence via upsert (\texttt{internal/storage/repository.go}).
+\end{itemize}
+
+Resilience behavior includes provider error classification and cooldown/suppression patterns (\texttt{internal/providers/provider.go}).
+
+\subsubsection*{Worker (\texttt{cmd/worker/main.go})}
+Processes validated records concurrently and transitions them through scoring lifecycle while supporting graceful shutdown.
+
+\subsubsection*{API (\texttt{cmd/api/main.go}, \texttt{internal/api/})}
+Exposes operational endpoints for health, events, pipeline metrics, exports, and manual synthetic injection.
+
+\subsection{Python Agents Service}
+
+\subsubsection*{Service Entry (\texttt{agents/app/main.py})}
+Hosts mirror endpoints and chain endpoints with CORS controls and lifecycle-managed adversarial services.
+
+\subsubsection*{Adversarial Mirror (\texttt{agents/app/adversarial/service.py})}
+Coordinates:
+\begin{itemize}[leftmargin=1.5em]
+    \item Blue enrichment path,
+    \item Red injection path,
+    \item Detector queue-processing path,
+    \item Go-event synchronization,
+    \item Snapshot generation for dashboard/export consistency.
+\end{itemize}
+
+\subsubsection*{Blue Agent (\texttt{agents/app/adversarial/blue_agent.py})}
+Performs contextual enrichment, corroboration updates, and evidence attachment using source-aware lookup behavior.
+
+\subsubsection*{Red Agent (\texttt{agents/app/adversarial/red_agent.py})}
+Generates synthetic poisoning scenarios and supports adaptive attack selection using recent hit/miss outcomes.
+
+\subsubsection*{Detector (\texttt{agents/app/adversarial/detector.py})}
+Applies poisoning rules and updates event stage and synthetic-injection detection linkage.
+
+\subsection{Persistence Layer}
+
+\subsubsection*{Core pipeline DB}
+\texttt{internal/storage/migrations/001\_init.sql} defines \texttt{threat\_records} with fields required for:
+\begin{itemize}[leftmargin=1.5em]
+    \item source traceability,
+    \item enrichment/scoring output,
+    \item detection status,
+    \item stage transitions.
+\end{itemize}
+
+\subsubsection*{Adversarial mirror DB}
+\texttt{agents/app/adversarial/storage.py} defines mirror tables:
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{mirror\_events}
+    \item \texttt{injections}
+    \item \texttt{pipeline\_runs}
+\end{itemize}
+to support red/blue analytics, freshness, and dashboard synchronization.
+
+\section{Data Model and Traceability}
+
+\subsection{Core Models}
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{pkg/models/threat.go}: \texttt{Threat}, \texttt{ThreatRecord}
+    \item \texttt{agents/app/adversarial/models.py}: \texttt{IOCEnvelope}
+\end{itemize}
+
+\subsection{Traceability Mechanisms}
+SPECTER preserves source lineage through fields such as:
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{source\_name}, \texttt{source\_url}, \texttt{source\_query}
+    \item \texttt{raw\_evidence} / \texttt{raw\_evidence\_json}
+    \item stable identifiers (e.g., event IDs from normalized identity generation)
+\end{itemize}
+This enables downstream analysts to inspect \emph{where} and \emph{why} each signal entered the pipeline.
+
+\section{Operational Pipeline Details}
+
+\subsection{OSINT Collection}
+Provider integrations include crt.sh, Shodan, URLHaus, AbuseIPDB, and OTX (see \texttt{internal/providers/}).
+
+\subsection{Normalization and Deduplication}
+\begin{itemize}[leftmargin=1.5em]
+    \item Normalization: canonical IOC typing and stable event identity generation.
+    \item Deduplication: hash-based filtering to reduce cycle-level redundancy before persistence.
+\end{itemize}
+
+\subsection{Noise Reduction and Poisoning Detection}
+Validation rules in \texttt{internal/validation/detector.go} and mirror detector logic in \texttt{agents/app/adversarial/detector.py} provide basic poisoning detection and stage transitions (validated vs quarantined).
+
+Representative rule families:
+\begin{itemize}[leftmargin=1.5em]
+    \item single-source fresh-domain anomalies,
+    \item suspicious timestamp behavior,
+    \item TTP/banner mismatch patterns.
+\end{itemize}
+
+\subsection{Scoring}
+Scoring logic in \texttt{internal/scoring/scorer.go} computes:
+\begin{itemize}[leftmargin=1.5em]
+    \item composite score,
+    \item threat level,
+    \item days-to-attack estimate,
+\end{itemize}
+using corroboration signals, port-risk features, synthetic flags, and detection penalties.
+
+\subsection{SOC-Oriented Outputs}
+SPECTER provides:
+\begin{itemize}[leftmargin=1.5em]
+    \item REST API endpoints for events and metrics,
+    \item dashboard-ready snapshot API,
+    \item STIX and PDF artifact exports.
+\end{itemize}
+
+\section{API Surface (Operational Summary)}
+
+\subsection{Go API (default \texttt{:8080})}
+Defined in \texttt{internal/api/router.go}:
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{GET /health}
+    \item \texttt{GET /api/v1/events}
+    \item \texttt{GET /api/v1/events/quarantined}
+    \item \texttt{GET /api/v1/metrics/pipeline}
+    \item \texttt{POST /api/v1/exports/stix}
+    \item \texttt{POST /api/v1/exports/report}
+    \item \texttt{POST /api/v1/agents/injections/trigger}
+\end{itemize}
+
+\subsection{Agents API (default \texttt{:8001})}
+Defined in \texttt{agents/app/main.py}:
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{GET /health}, \texttt{GET /ready}
+    \item \texttt{POST /mirror/ingest}
+    \item \texttt{POST /mirror/injections/trigger}
+    \item \texttt{GET /mirror/events}, \texttt{GET /mirror/injections}, \texttt{GET /mirror/metrics}
+    \item \texttt{GET /mirror/dashboard}
+    \item \texttt{POST /mirror/exports/stix}, \texttt{POST /mirror/exports/report}
+    \item \texttt{POST /agents/blue/analyze}, \texttt{POST /agents/red/inject}, \texttt{POST /agents/run}
+\end{itemize}
+
+\section{Reporting and Intelligence Products}
+
+\subsection{STIX Export}
+Implemented in Go exporter logic (\texttt{internal/output/stix\_exporter.go}) and mirror snapshot export utilities (\texttt{agents/app/exports.py}).
+
+\subsection{PDF Report Export}
+Implemented in Go report exporter (\texttt{internal/output/report\_exporter.go}) and mirror snapshot report generation path (\texttt{agents/app/exports.py}).
+
+\subsection{Dashboard Alignment Mechanism}
+Dashboard views and mirror exports share a common snapshot basis (\texttt{GET /mirror/dashboard}), reducing mismatch between visualized and exported intelligence sets. Mirror export endpoints are snapshot-aligned with dashboard state.
+
+\section{Reproducibility and Demonstration Readiness}
+
+\subsection{Bootstrap and Runtime Orchestration}
+\begin{lstlisting}[style=bashstyle]
+./scripts/bootstrap.sh
+./scripts/run_local.sh start
+./scripts/run_local.sh status
+\end{lstlisting}
+
+\subsection{Reliability and Validation Checks}
+\begin{lstlisting}[style=bashstyle]
+make ci-check
+# or
+just ci-check
+\end{lstlisting}
+
+These include Go tests, Python tests, contract tests, compile checks, and shell syntax checks.
+
+\subsection{Demo-Oriented Scripts}
+\begin{lstlisting}[style=bashstyle]
+./scripts/seed_demo_data.sh
+./scripts/agent_smoke.sh
+./scripts/rehearse_demo.sh
+./scripts/create_artifact_bundle.sh
+\end{lstlisting}
+
+These scripts support repeatable rehearsal, endpoint verification, and artifact packaging.
+
+\section{Challenge Requirement Coverage Matrix}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.27\textwidth} >{\raggedright\arraybackslash}p{0.35\textwidth} >{\raggedright\arraybackslash}p{0.30\textwidth}}
+\toprule
+\textbf{OTIC Requirement} & \textbf{SPECTER Implementation} & \textbf{Evidence (Code/Docs)} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{OTIC Requirement} & \textbf{SPECTER Implementation} & \textbf{Evidence (Code/Docs)} \\
+\midrule
+\endhead
+
+Collect OSINT from public sources & Multi-provider collection with runtime provider controls and target-based activation & \texttt{cmd/collector/main.go}, \texttt{internal/providers/*}, \texttt{README.md} \\
+
+Document and trace data origins & Source metadata and evidence fields preserved through normalization, storage, and APIs & \texttt{pkg/models/threat.go}, \texttt{internal/ingest/normalizer.go}, \texttt{internal/storage/repository.go} \\
+
+Enrich and score signals & Blue-side enrichment plus deterministic scoring and threat-level mapping & \texttt{agents/app/adversarial/blue\_agent.py}, \texttt{internal/scoring/scorer.go} \\
+
+Filter noise/inconsistency & Dedupe + validation rules + quarantine stages & \texttt{internal/ingest/dedupe.go}, \texttt{internal/validation/detector.go}, \texttt{agents/app/adversarial/detector.py} \\
+
+Basic poisoning detection & Rule-based suspicious pattern detection in both pipeline and mirror layers & \texttt{internal/validation/detector.go}, \texttt{agents/app/adversarial/detector.py} \\
+
+SOC-oriented reporting & API metrics/events + dashboard + STIX/PDF export artifacts & \texttt{internal/api/router.go}, \texttt{agents/app/main.py}, \texttt{internal/output/*}, \texttt{agents/app/exports.py} \\
+
+Functional (non-conceptual) prototype & Executable services, scripted startup, CI checks, demo rehearsal and artifact bundle scripts & \texttt{scripts/run\_local.sh}, \texttt{scripts/ci\_check.sh}, \texttt{scripts/rehearse\_demo.sh}, \texttt{docs/RUNNING\_GUIDE.md} \\
+
+\bottomrule
+\end{longtable}
+
+\section{Operational Constraints and Limitations}
+
+Current known constraints:
+\begin{itemize}[leftmargin=1.5em]
+    \item External provider quotas and plan restrictions can limit live telemetry quality.
+    \item SQLite backend is ideal for prototype reliability and reproducibility, but not horizontal-scale production.
+    \item Some hardening tasks remain open (fault-injection resilience tests, STIX interoperability validation, hosted CI wiring).
+\end{itemize}
+
+Tracked in: \texttt{TEAM\_TASK\_LIST.md}
+
+\section{Ethics and Safety Posture}
+
+SPECTER is designed around public OSINT and controlled synthetic adversarial signals for testing detection workflows. Automatic red injection is guarded by configuration thresholds (ratio and baseline telemetry controls), while manual red triggers remain operator-driven. This supports safe demonstration behavior and reduces synthetic dominance in analyst views.
+
+\section{Conclusion}
+
+SPECTER demonstrates that a student-built TI prototype can move beyond data scraping into operational intelligence engineering. The system addresses OTIC’s core technical expectations through an executable pipeline that ingests public OSINT, preserves origin traceability, enriches and scores signals, filters inconsistent data, detects basic poisoning patterns, and outputs SOC-ready artifacts and views.
+
+This implementation is practical, reproducible, and directly demonstrable under challenge conditions.
+
+\section*{Appendix A: Key Runtime Commands}
+
+\begin{lstlisting}[style=bashstyle]
+# Bootstrap and local run
+./scripts/bootstrap.sh
+./scripts/run_local.sh start
+
+# Health checks
+curl -s http://localhost:8080/health
+curl -s http://localhost:8001/health
+
+# Quality checks
+make ci-check
+
+# Demo preparation
+./scripts/seed_demo_data.sh
+./scripts/agent_smoke.sh
+./scripts/rehearse_demo.sh
+
+# Artifact bundling
+./scripts/create_artifact_bundle.sh
+\end{lstlisting}
+
+\section*{Appendix B: Documentation Files}
+
+Maintained source-of-truth documents:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{README.md}
+    \item \texttt{docs/RUNNING\_GUIDE.md}
+    \item \texttt{TEAM\_TASK\_LIST.md}
+\end{itemize}
+
+Supplemental comprehensive reference:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{PROJECT\_DOCUMENTATION.md}
+\end{itemize}
+
+\end{document}

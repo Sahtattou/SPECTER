@@ -4,7 +4,7 @@ import logging
 import random
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from app.adversarial.models import IOCEnvelope, utc_now_iso
@@ -23,6 +23,8 @@ ATTACK_TYPES = [
 BRANDS = ["paypal", "microsoft", "google", "amazon", "apple"]
 ACTIONS = ["secure", "verify", "login", "account", "update"]
 TLDS = ["com", "net"]
+ADAPTIVE_HISTORY_LIMIT = 120
+MIN_ATTACK_WEIGHT = 0.2
 
 
 class RedAgent:
@@ -33,11 +35,13 @@ class RedAgent:
         *,
         interval_seconds: int = 30,
         should_inject: Optional[Callable[[], bool]] = None,
+        rng: Optional[random.Random] = None,
     ) -> None:
         self.queue_manager = queue_manager
         self.storage = storage
         self.interval_seconds = max(1, int(interval_seconds))
         self.should_inject = should_inject
+        self._rng = rng if rng is not None else random.Random()
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -54,8 +58,25 @@ class RedAgent:
         self._stop_event.set()
 
     def inject_now(self, attack_type: Optional[str] = None) -> IOCEnvelope:
-        selected_attack = attack_type or random.choice(ATTACK_TYPES)
+        strategy: Dict[str, Any] = {
+            "mode": "manual" if attack_type else "adaptive",
+            "history_size": 0,
+        }
+
+        if attack_type:
+            selected_attack = attack_type
+        else:
+            selected_attack, strategy = self._select_attack_type()
+
         envelope = self._generate_attack(selected_attack)
+
+        evidence = (
+            envelope.raw_evidence if isinstance(envelope.raw_evidence, dict) else {}
+        )
+        strategy["selected_attack"] = selected_attack
+        evidence["red_strategy"] = strategy
+        envelope.raw_evidence = evidence
+
         self.storage.log_injection(
             attack_type=envelope.poison_attack_type or selected_attack,
             raw_value=envelope.raw_value,
@@ -86,6 +107,94 @@ class RedAgent:
             return self._ttp_mismatch()
         return self._timestamp_manipulation()
 
+    def _select_attack_type(self) -> Tuple[str, Dict[str, Any]]:
+        injections = self.storage.get_injections(limit=ADAPTIVE_HISTORY_LIMIT)
+        weights, performance = self._compute_adaptive_weights(injections)
+        selected_attack = self._weighted_choice(weights)
+
+        return selected_attack, {
+            "mode": "adaptive",
+            "history_size": len(injections),
+            "weights": {attack: round(weight, 4) for attack, weight in weights.items()},
+            "performance": {
+                attack: {
+                    "hits": round(stats["hits"], 3),
+                    "misses": round(stats["misses"], 3),
+                    "unresolved": round(stats["unresolved"], 3),
+                }
+                for attack, stats in performance.items()
+            },
+        }
+
+    def _compute_adaptive_weights(
+        self, injections: List[Dict[str, Any]]
+    ) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
+        performance: Dict[str, Dict[str, float]] = {
+            attack: {"hits": 0.0, "misses": 0.0, "unresolved": 0.0}
+            for attack in ATTACK_TYPES
+        }
+
+        total = max(len(injections), 1)
+        for index, injection in enumerate(injections):
+            attack = str(injection.get("attack_type") or "").strip().upper()
+            if attack not in performance:
+                continue
+
+            decay = max(0.35, 1.0 - (float(index) / float(total)))
+            detected = self._normalize_detected(injection.get("detected"))
+            if detected is True:
+                performance[attack]["hits"] += decay
+            elif detected is False:
+                performance[attack]["misses"] += decay
+            else:
+                performance[attack]["unresolved"] += decay
+
+        weights: Dict[str, float] = {}
+        for attack, stats in performance.items():
+            observed = stats["hits"] + stats["misses"]
+            miss_rate = 0.0 if observed == 0 else stats["misses"] / observed
+            hit_rate = 0.0 if observed == 0 else stats["hits"] / observed
+
+            exploration_bonus = 0.35 / (1.0 + observed)
+            unresolved_penalty = min(stats["unresolved"], 4.0) * 0.05
+            miss_volume_bonus = min(stats["misses"], 5.0) * 0.10
+            hit_volume_penalty = min(stats["hits"], 5.0) * 0.06
+
+            weight = (
+                1.0
+                + (miss_rate * 1.25)
+                - (hit_rate * 0.75)
+                + exploration_bonus
+                + miss_volume_bonus
+                - hit_volume_penalty
+                - unresolved_penalty
+            )
+            weights[attack] = max(MIN_ATTACK_WEIGHT, weight)
+
+        return weights, performance
+
+    def _weighted_choice(self, weights: Dict[str, float]) -> str:
+        ordered = [
+            (
+                attack,
+                max(MIN_ATTACK_WEIGHT, float(weights.get(attack, MIN_ATTACK_WEIGHT))),
+            )
+            for attack in ATTACK_TYPES
+        ]
+
+        total_weight = sum(weight for _, weight in ordered)
+        if total_weight <= 0:
+            return self._rng.choice(ATTACK_TYPES)
+
+        threshold = self._rng.random() * total_weight
+        cumulative = 0.0
+        for attack, weight in ordered:
+            cumulative += weight
+            if threshold <= cumulative:
+                return attack
+
+        return ordered[-1][0]
+
     def _recent_events(self) -> List[Dict[str, Any]]:
         return self.storage.get_recent_events(limit=500)
 
@@ -97,7 +206,7 @@ class RedAgent:
             and str(event.get("source_name", "")).lower() == "abuseipdb"
             and self._abuse_score(event) >= 70
         ]
-        seed = random.choice(candidates) if candidates else None
+        seed = self._rng.choice(candidates) if candidates else None
         ip_value = str(seed.get("raw_value") if seed else "203.0.113.77")
 
         return IOCEnvelope(
@@ -119,8 +228,8 @@ class RedAgent:
         )
 
     def _ghost_domain(self) -> IOCEnvelope:
-        suffix = random.randint(1000, 9999)
-        domain = f"{random.choice(BRANDS)}-{random.choice(ACTIONS)}-{suffix}.{random.choice(TLDS)}"
+        suffix = self._rng.randint(1000, 9999)
+        domain = f"{self._rng.choice(BRANDS)}-{self._rng.choice(ACTIONS)}-{suffix}.{self._rng.choice(TLDS)}"
 
         return IOCEnvelope(
             ioc_uuid=str(uuid4()),
@@ -156,7 +265,7 @@ class RedAgent:
                 if str(port).isdigit()
             ]
         ]
-        seed = random.choice(candidates) if candidates else None
+        seed = self._rng.choice(candidates) if candidates else None
         ip_value = str(seed.get("raw_value") if seed else "198.51.100.42")
 
         return IOCEnvelope(
@@ -184,7 +293,7 @@ class RedAgent:
             for event in self._recent_events()
             if float(event.get("composite_score") or 0.0) > 60.0
         ]
-        seed = random.choice(candidates) if candidates else None
+        seed = self._rng.choice(candidates) if candidates else None
         value = str(seed.get("raw_value") if seed else "paypal-login-alert-3133.com")
         ioc_type = str(seed.get("ioc_type") if seed else "domain")
         historical_timestamp = (
@@ -270,3 +379,37 @@ class RedAgent:
             except ValueError:
                 return default
         return default
+
+    @staticmethod
+    def _normalize_detected(value: object) -> Optional[bool]:
+        if value is None:
+            return None
+
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, int):
+            if value == 1:
+                return True
+            if value == 0:
+                return False
+            return None
+
+        if isinstance(value, float):
+            if value == 1.0:
+                return True
+            if value == 0.0:
+                return False
+            return None
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "none", "null"}:
+                return None
+            if normalized in {"1", "true", "yes", "y"}:
+                return True
+            if normalized in {"0", "false", "no", "n"}:
+                return False
+            return None
+
+        return None

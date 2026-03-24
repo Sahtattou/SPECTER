@@ -1,0 +1,362 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{caption}
+
+\geometry{margin=1in}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  pdftitle={SPECTER Project Report},
+  pdfauthor={Cyber Horizon Team}
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\title{SPECTER: Open Threat Intelligence Prototype\\Technical Report}
+\author{Cyber Horizon Team}
+\date{March 24, 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Executive Summary}
+SPECTER is an operational Threat Intelligence prototype built for the Open Threat Intelligence Challenge. The system transforms public OSINT into structured intelligence through an end-to-end pipeline:
+\begin{enumerate}[leftmargin=1.5em]
+  \item Collection from multiple public providers.
+  \item Normalization and de-duplication.
+  \item Validation with poisoning-aware checks.
+  \item Scoring and prioritization.
+  \item API and dashboard delivery for SOC-style workflows.
+  \item Adversarial red-blue simulation to evaluate detection robustness.
+\end{enumerate}
+
+The implementation uses a Go core for ingestion, validation, scoring, persistence, and exports, plus a Python FastAPI agent service for blue analysis, red simulation, and mirror-based adversarial metrics. A React + Tauri interface provides analyst visualization.
+
+\section{Challenge Context and Specifications}
+\subsection{Challenge Scope}
+The challenge requires a functional prototype that converts OSINT into structured intelligence consumable by cybersecurity teams. Core required capabilities include:
+\begin{itemize}[leftmargin=1.5em]
+  \item OSINT collection from public sources.
+  \item Traceability of data origins.
+  \item Enrichment and scoring of intelligence signals.
+  \item Noise reduction and inconsistency handling.
+  \item Basic poisoning detection.
+  \item SOC-oriented reporting outputs.
+\end{itemize}
+
+\subsection{Deliverables Required by the Challenge}
+\begin{itemize}[leftmargin=1.5em]
+  \item Presentation of problem, architecture, and use case.
+  \item Video demonstration (up to 2 minutes).
+  \item Written report with design, technologies, and limitations.
+  \item Live or recorded prototype demo.
+\end{itemize}
+
+\subsection{Scoring Criteria (Challenge Definition)}
+\begin{itemize}[leftmargin=1.5em]
+  \item Technical: 12 points.
+  \item Non-technical: 6 points.
+  \item Bonus: 2 points.
+  \item Total: 20 points.
+\end{itemize}
+
+\section{Problem Statement}
+OSINT is widely available but often fragmented and difficult to operationalize directly in SOC workflows. Many demonstrations remain conceptual and do not provide deterministic processing, traceability, and analyst-ready output artifacts. SPECTER addresses this gap by implementing a runnable pipeline with explicit stages, API surfaces, artifact generation, and adversarial behavior simulation.
+
+\section{Project Objectives}
+\subsection{In-Scope Objectives}
+\begin{itemize}[leftmargin=1.5em]
+  \item Build a working pipeline from collection to intelligence output.
+  \item Preserve source metadata and evidence traceability.
+  \item Provide deterministic scoring and stage transitions.
+  \item Expose machine-consumable API endpoints for operations.
+  \item Generate exportable artifacts (STIX and report).
+  \item Demonstrate resilience through red-blue simulation.
+\end{itemize}
+
+\subsection{Out-of-Scope for Current Iteration}
+\begin{itemize}[leftmargin=1.5em]
+  \item Cloud-native production deployment templates.
+  \item Full enterprise IAM and RBAC model.
+  \item Distributed high-scale message-queue architecture.
+  \item Extensive third-party SIEM connector catalog.
+\end{itemize}
+
+\section{System Architecture}
+\subsection{Architecture Overview}
+SPECTER architecture consists of:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Data sources}: crt.sh, Shodan, URLHaus, AbuseIPDB, OTX.
+  \item \textbf{Go collector}: collection, normalization, de-duplication, validation, scoring.
+  \item \textbf{SQLite persistence}: canonical threat record storage.
+  \item \textbf{Go API}: events, metrics, exports, manual injection.
+  \item \textbf{Go worker}: validated-to-scored processing loop.
+  \item \textbf{Python FastAPI agent service}: blue analyst, red injector, detector context over adversarial mirror.
+  \item \textbf{React + Tauri UI}: analyst-facing dashboard and export view.
+\end{itemize}
+
+\subsection{Architecture Figure}
+\begin{figure}[H]
+\centering
+% The report tries common filenames for the architecture image.
+\IfFileExists{architecture.png}{\includegraphics[width=\textwidth]{architecture.png}}{
+\IfFileExists{project_architecture.png}{\includegraphics[width=\textwidth]{project_architecture.png}}{
+\IfFileExists{docs/architecture.png}{\includegraphics[width=\textwidth]{docs/architecture.png}}{
+\IfFileExists{docs/project_architecture.png}{\includegraphics[width=\textwidth]{docs/project_architecture.png}}{
+\fbox{\parbox{0.95\textwidth}{\centering
+Architecture image placeholder.\\
+Place the provided architecture screenshot as one of:\\
+architecture.png, project_architecture.png, docs/architecture.png, or docs/project_architecture.png
+}}
+}}}}
+\caption{SPECTER architecture diagram provided for the project.}
+\label{fig:architecture}
+\end{figure}
+
+\section{Agentic Layer Design (Blue, Red, Detector)}
+\subsection{Blue Analyst Agent}
+\begin{itemize}[leftmargin=1.5em]
+  \item Endpoint: \texttt{/agents/blue/analyze}.
+  \item Function: Summarizes threats, groups by severity, extracts top IOCs, and emits recommended actions.
+  \item Value: Accelerates triage and helps SOC teams prioritize investigation.
+\end{itemize}
+
+\subsection{Red Injector Agent}
+\begin{itemize}[leftmargin=1.5em]
+  \item Endpoint: \texttt{/agents/red/inject}.
+  \item Function: Simulates adversarial injections and poisoning behavior under controlled conditions.
+  \item Value: Validates robustness and helps tune mitigation and guardrail thresholds.
+\end{itemize}
+
+\subsection{Detector Agent Context}
+\begin{itemize}[leftmargin=1.5em]
+  \item Implemented through poisoning-aware validation and mirror metrics context.
+  \item Inputs include suspicious patterns and adversarial telemetry.
+  \item Output influences quarantine signaling, detection visibility, and confidence in scored intelligence.
+\end{itemize}
+
+\subsection{Adversarial Mirror}
+\begin{itemize}[leftmargin=1.5em]
+  \item Supports ingestion of real IOC events and synthetic injection activity.
+  \item Provides synchronized dashboard snapshot endpoints.
+  \item Exposes metrics for red-blue balance and event/injection visibility.
+\end{itemize}
+
+\section{Technology Stack}
+\begin{longtable}{p{0.24\textwidth} p{0.70\textwidth}}
+\toprule
+\textbf{Layer} & \textbf{Technology} \\
+\midrule
+Core services & Go 1.24, net/http, repository and pipeline modules \\
+Persistence & SQLite with indexed \texttt{threat\_records} schema \\
+Agentic service & Python 3.11, FastAPI, Pydantic models \\
+Frontend & React 19, Vite 8, Tauri 2 \\
+Build and automation & Makefile, justfile, Bash orchestration scripts \\
+Testing and checks & Go test, pytest, contract tests, compile and shell syntax checks \\
+\bottomrule
+\end{longtable}
+
+\section{Data Pipeline Specification}
+\subsection{Processing Stages}
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Ingested}: raw record collected from configured providers.
+  \item \textbf{Validated}: deterministic detection rules applied.
+  \item \textbf{Scored}: composite score computed and threat level assigned.
+  \item \textbf{Quarantined}: suspicious/poisoned records isolated from normal flow.
+\end{enumerate}
+
+\subsection{Scoring Model Summary}
+\begin{itemize}[leftmargin=1.5em]
+  \item Baseline score starts at 20.
+  \item Corroboration increases score.
+  \item High-risk ports and secondary ports contribute weighted bonuses.
+  \item Poison detection, suspicious rules, and synthetic indicators apply penalties.
+  \item Final score is clamped to [0, 100].
+  \item Threat levels map to \texttt{critical/high/medium/low}.
+\end{itemize}
+
+\section{Data Model and Persistence}
+\subsection{Primary Table: \texttt{threat\_records}}
+\begin{itemize}[leftmargin=1.5em]
+  \item Identity and IOC: \texttt{event\_id}, \texttt{ioc\_value}, \texttt{ioc\_type}.
+  \item Source traceability: \texttt{source\_name}, \texttt{source\_url}, \texttt{source\_query}, raw evidence JSON.
+  \item Timing and quality: \texttt{collected\_at}, \texttt{created\_at}, \texttt{updated\_at}, corroboration count.
+  \item Network features: open ports JSON, ASN.
+  \item Adversarial features: synthetic flag, poison attack type, detection flags and rules.
+  \item Risk outputs: composite score, threat level, days to attack, pipeline stage.
+\end{itemize}
+
+\subsection{Indexes}
+\begin{itemize}[leftmargin=1.5em]
+  \item Stage index for operational filtering.
+  \item IOC compound index for lookup and de-duplication efficiency.
+  \item Collection-time index for timeline and freshness analytics.
+\end{itemize}
+
+\section{API Specification}
+\subsection{Go API Endpoints}
+\begin{longtable}{p{0.11\textwidth} p{0.35\textwidth} p{0.48\textwidth}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Purpose} \\
+\midrule
+GET & \texttt{/health} & Liveness check for service availability. \\
+GET & \texttt{/api/v1/events} & Event retrieval with stage and limit options. \\
+GET & \texttt{/api/v1/events/quarantined} & Quarantine-specific event retrieval. \\
+GET & \texttt{/api/v1/metrics/pipeline} & Pipeline counters and freshness telemetry. \\
+POST & \texttt{/api/v1/exports/stix} & STIX artifact generation. \\
+POST & \texttt{/api/v1/exports/report} & Report artifact generation. \\
+POST & \texttt{/api/v1/agents/injections/trigger} & Manual adversarial injection trigger path. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Agent Service Endpoints}
+\begin{longtable}{p{0.11\textwidth} p{0.35\textwidth} p{0.48\textwidth}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Purpose} \\
+\midrule
+GET & \texttt{/health} & Agent service liveness. \\
+GET & \texttt{/ready} & Readiness with Go API dependency check. \\
+POST & \texttt{/agents/blue/analyze} & Blue analyst workflow execution. \\
+POST & \texttt{/agents/red/inject} & Red injector workflow execution. \\
+POST & \texttt{/agents/run} & Generic named-agent execution. \\
+POST & \texttt{/mirror/ingest} & Mirror ingest of real IOC events. \\
+GET & \texttt{/mirror/events} & Mirror event feed retrieval. \\
+GET & \texttt{/mirror/injections} & Injection activity retrieval. \\
+GET & \texttt{/mirror/metrics} & Mirror operational metrics. \\
+GET & \texttt{/mirror/dashboard} & Unified dashboard snapshot. \\
+POST & \texttt{/mirror/exports/stix} & Snapshot-based STIX export. \\
+POST & \texttt{/mirror/exports/report} & Snapshot-based report export. \\
+\bottomrule
+\end{longtable}
+
+\section{Runtime and Deployment Specifications}
+\subsection{Prerequisites}
+\begin{itemize}[leftmargin=1.5em]
+  \item Go 1.24+.
+  \item Python 3.11+.
+  \item Node.js 18+.
+  \item Rust toolchain for Tauri packaging.
+  \item Bash-compatible shell.
+\end{itemize}
+
+\subsection{Default Runtime Ports}
+\begin{itemize}[leftmargin=1.5em]
+  \item Go API: 8080.
+  \item Agent service: 8001.
+  \item Dashboard dev server: 5173.
+\end{itemize}
+
+\subsection{Important Configuration Variables}
+\begin{itemize}[leftmargin=1.5em]
+  \item Pipeline: \texttt{COLLECTION\_INTERVAL\_SECONDS}, \texttt{WORKER\_CONCURRENCY}, \texttt{DB\_DSN}.
+  \item Providers: \texttt{SHODAN\_TARGETS}, \texttt{ABUSEIPDB\_TARGETS}, \texttt{OTX\_TARGETS}, \texttt{URLHAUS\_HOSTS}, \texttt{CRTSH\_QUERY}.
+  \item Toggles: \texttt{ENABLE\_SHODAN}, \texttt{ENABLE\_ABUSEIPDB}, \texttt{ENABLE\_OTX}, \texttt{ENABLE\_URLHAUS}, \texttt{ENABLE\_CRTSH}.
+  \item Agentic controls: \texttt{RED\_AGENT\_INTERVAL\_SECONDS}, \texttt{RED\_MAX\_RATIO}, \texttt{MIN\_REAL\_EVENTS\_BEFORE\_AUTO\_RED}.
+  \item Sync controls: \texttt{GO\_SYNC\_INTERVAL\_SECONDS}, \texttt{GO\_SYNC\_BATCH\_LIMIT}, \texttt{GO\_SYNC\_ON\_STARTUP}.
+\end{itemize}
+
+\section{Reliability, Security, and Governance}
+\subsection{Reliability Controls}
+\begin{itemize}[leftmargin=1.5em]
+  \item Provider error classification and cooldown policy.
+  \item Transient backoff and rate-limit suppression behavior.
+  \item Graceful service shutdown for worker process.
+  \item Health/readiness endpoints for observability.
+\end{itemize}
+
+\subsection{Security and Integrity Controls}
+\begin{itemize}[leftmargin=1.5em]
+  \item CORS allowlist for API surfaces.
+  \item Poisoning-aware validation and quarantine stage.
+  \item Red/blue balance controls to prevent synthetic dominance.
+  \item Controlled use of public OSINT only, aligned with challenge ethics.
+\end{itemize}
+
+\section{Testing and Validation}
+\subsection{Quality Strategy}
+\begin{itemize}[leftmargin=1.5em]
+  \item Go tests for core modules and API behavior.
+  \item Python tests for agent chains, mirror behavior, and exports.
+  \item Contract tests for cross-service compatibility.
+  \item Python compile checks and shell script syntax checks.
+\end{itemize}
+
+\subsection{CI-Equivalent Local Validation}
+The \texttt{scripts/ci\_check.sh} profile validates:
+\begin{enumerate}[leftmargin=1.5em]
+  \item Go tests.
+  \item Python tests.
+  \item Contract-only tests.
+  \item Python syntax compile checks.
+  \item Shell script syntax checks.
+\end{enumerate}
+
+\section{Challenge Compliance Matrix}
+\begin{longtable}{p{0.38\textwidth} p{0.56\textwidth}}
+\toprule
+\textbf{Challenge Requirement} & \textbf{SPECTER Implementation} \\
+\midrule
+Collect OSINT from public sources & Multi-provider collectors (crt.sh, Shodan, URLHaus, AbuseIPDB, OTX). \\
+Document and trace data origins & Source name, query, URL, timestamps, and evidence fields stored per record. \\
+Enrich and score intelligence signals & Validation rules, feature extraction, and deterministic composite scoring pipeline. \\
+Filter noise and inconsistent data & De-duplication, validation checks, stage transitions, quarantine flow. \\
+Basic poisoning detection & Poison-aware detection logic and red injection simulation for stress tests. \\
+Produce structured TI reports & API-driven report export and STIX export artifact generation. \\
+Working prototype (not concept-only) & Runnable local stack with API, worker, collector, agents, dashboard, and scripts. \\
+\bottomrule
+\end{longtable}
+
+\section{Known Limitations}
+\begin{itemize}[leftmargin=1.5em]
+  \item SQLite persistence limits horizontal scalability in current form.
+  \item External API rate limits and account constraints affect source throughput.
+  \item Local-first deployment model requires further cloud-hardening work.
+  \item Interoperability validation against external STIX tooling remains an ongoing task.
+\end{itemize}
+
+\section{Roadmap}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Expand full end-to-end deterministic integration tests.
+  \item Add fault-injection tests for timeout, malformed payload, and rate-limit paths.
+  \item Validate STIX artifacts against external validators and import workflows.
+  \item Add hosted CI workflow parity with local \texttt{ci\_check}.
+  \item Finalize submission package: presentation, demo video, screenshots, and checklist.
+\end{enumerate}
+
+\section{Conclusion}
+SPECTER satisfies the challenge objective by delivering a functional Threat Intelligence prototype that ingests public OSINT, performs traceable and poisoning-aware processing, and outputs operational intelligence via APIs, dashboard views, and export artifacts. The architecture is modular, demonstrable, and ready for further hardening and scale-oriented evolution.
+
+\appendix
+\section{Build and Run Quick Reference}
+\begin{itemize}[leftmargin=1.5em]
+  \item Bootstrap: \texttt{./scripts/bootstrap.sh}
+  \item Start local stack: \texttt{./scripts/run\_local.sh start}
+  \item Status: \texttt{./scripts/run\_local.sh status}
+  \item Logs: \texttt{./scripts/run\_local.sh logs}
+  \item Stop: \texttt{./scripts/run\_local.sh stop}
+  \item CI-equivalent checks: \texttt{./scripts/ci\_check.sh}
+\end{itemize}
+
+\section{LaTeX Compilation Command}
+Compile from the repository root:
+\begin{verbatim}
+pdflatex -output-directory=docs docs/SPECTER_Project_Report.tex
+\end{verbatim}
+
+\end{document}
